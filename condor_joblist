@@ -1,0 +1,45 @@
+
+COMMAND='condor_q -nobatch -g -allusers -r'
+
+eval ${COMMAND}                     | \
+    grep slot                       | \
+    sed 's:slot.*\@::g'             | \
+    sed 's:.intra.unizar.es::g'     | \
+    sed "s/[[:space:]]\+/ /g"       | \
+    sort -k  2   | python <(
+#::::::::::::::::::::::::::::::::::::::::::
+cat << END
+import sys, re
+from collections import defaultdict,OrderedDict
+
+d = defaultdict(list)
+
+def print_line(line_):
+    print('%7s  ' % line_[5] , end='')    
+    print('%-10s' % line_[0] , end='' )
+    print('%19s' % line_[1] , end='' )
+    print('%10s' % line_[2] , end='' )
+    print('%10s' % line_[3] , end='' )
+    print('%15s' % line_[4] )
+    
+for line in sys.stdin.readlines():   
+    line_ = str(line).split()
+    host = line_[-1]
+    
+    
+    d[host].append(line_)
+
+d = OrderedDict(sorted(d.items()))
+
+print_line(['     ID','OWNER','DATE','TIME','DURATION','HOST'])   
+
+for host in d.keys():
+    print('-' * 73)    
+    for line_ in d[host]:
+        print_line(line_)   
+
+END
+#::::::::::::::::::::::::::::::::::::::::::
+ )
+ 
+
