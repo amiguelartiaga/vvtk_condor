@@ -344,16 +344,3 @@ if [ $SUB == "false" ];then
 	rm -f $TASK_FILE
 fi
 
-
-echo -n "   - n_errors: "
-
-BASENAME=${TASK_FILE%.*}
-N_ERR=`ls -l $BASENAME*err | awk '{if($5 != 0) {print $5}}' | wc | awk '{ print $1}'`
-if [ $N_ERR == 0 ] 
-then
-	echo $N_ERR | awk '{ printf("  \x1b[1;32m%d\x1b[0m\n",$1);}'
-else
-	echo $N_ERR | awk '{ printf("  \x1b[1;31m%d\x1b[0m\n",$1);}'
-	exit -1
-fi
-

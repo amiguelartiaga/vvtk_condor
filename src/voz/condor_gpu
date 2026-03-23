@@ -1,5 +1,16 @@
 #!/bin/bash
 
+#-------------------------------------------------------------------
+# parse --block/--noblock (default: --block)
+BLOCK_MODE="block"
+if [[ "$1" == "--noblock" ]]; then
+    BLOCK_MODE="noblock"
+    shift
+elif [[ "$1" == "--block" ]]; then
+    BLOCK_MODE="block"
+    shift
+fi
+
 file=$1
 
 #-------------------------------------------------------------------
@@ -14,6 +25,23 @@ args=${args// /_}
 args=${args//-/_} 
 args=${args//\//_} 
 file_condor_base=$args
+
+#-------------------------------------------------------------------
+# lock check: warn if a previous job with the same name is still running
+lock_file=.condor/${file_condor_base}.lock
+clog_file=.condor/${file_condor_base}.clog
+if [[ -f "$lock_file" ]]; then
+    if [[ -f "$clog_file" ]] && grep -qE '^005|^009' "$clog_file"; then
+        echo "Previous job finished. Removing stale lock."
+        rm -f "$lock_file"
+    else
+        echo -e "\e[1;31mWARNING: A job with the same name is already running or queued!\e[0m"
+        echo -e "\e[1;31mLock file: $lock_file\e[0m"
+        echo -e "\e[1;33mIf the previous job is no longer running, remove the lock manually:\e[0m"
+        echo -e "\e[1;33m  rm $lock_file\e[0m"
+        exit 1
+    fi
+fi
 
 #-------------------------------------------------------------------
 # create condor config
@@ -31,7 +59,7 @@ cat > ${condor_task}  << EOF
 
 universe              = vanilla
 notification          = Never 
-nice_user             = True
+#nice_user             = True
 getenv                = True
 request_cpus          = 1
 request_gpus          = 1
@@ -63,17 +91,34 @@ EOF
 #cat ${condor_task}
 
 #-------------------------------------------------------------------
+# clean old condor log so condor_wait doesn't see stale events
+rm -f .condor/${file_condor_base}.clog
+
+#-------------------------------------------------------------------
+# create lock file
+touch "$lock_file"
+
+
+#-------------------------------------------------------------------
 # launch condor job
 
-_condor_submit.sh --sync y --config ${condor_task} 
-
+if [[ "$BLOCK_MODE" == "block" ]]; then
+    # block until the job is done
+    _condor_submit.sh --sync y --config ${condor_task}
+else
+    # non-blocking call
+    _condor_submit.sh --config ${condor_task}
+fi
 
 #-------------------------------------------------------------------
 # log
-cat .condor/${file_condor_base}.log
+echo "-----------------------------"    
+echo "log output: .condor/${file_condor_base}.log"
+echo "err output: .condor/${file_condor_base}.err"
+echo "-----------------------------"
+
 
 #-------------------------------------------------------------------
 # clean
-
 #rm -rf .condor/
 
