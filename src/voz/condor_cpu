@@ -70,7 +70,7 @@ should_transfer_files = no
 EOF
 #::::::::::::::::::::::::::::::::::::::::::
 fi
-echo "requirements   = TARGET.Machine == \"${HOSTNAME}\"" >> ${condor_task}
+#echo "requirements   = TARGET.Machine == \"${HOSTNAME}\"" >> ${condor_task}
 
 #-------------------------------------------------------------------
 
