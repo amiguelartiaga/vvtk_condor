@@ -32,8 +32,9 @@ done
 PAYLOAD="$TMPDIR/payload.tar.gz"
 tar -czf "$PAYLOAD" -C "$TMPDIR" "${NAMES[@]}"
 
-# Write the installer header
-cat > "$OUT" << 'INSTALLER_HEADER'
+# Build the installer by writing it in parts (avoids sed on huge base64)
+# Part 1: script header + opening brace (forces bash to read all before executing)
+cat > "$OUT" << 'PART1'
 #!/bin/bash
 # ============================================================================
 #  condor_voz — interactive installer for vvtk_condor tools
@@ -41,6 +42,7 @@ cat > "$OUT" << 'INSTALLER_HEADER'
 #  Install:  curl -fsSL <URL>/condor_voz | bash
 #        or: bash condor_voz
 # ============================================================================
+{
 set -e
 
 BOLD='\e[1m'
@@ -59,7 +61,7 @@ echo ""
 # ---------------------------------------------------------------
 DEFAULT_INSTALL_DIR="$HOME/.local/bin"
 echo -e "${CYAN}Where should the scripts be installed?${RESET}"
-read -rp "  Install directory [$DEFAULT_INSTALL_DIR]: " INSTALL_DIR
+read -rp "  Install directory [$DEFAULT_INSTALL_DIR]: " INSTALL_DIR < /dev/tty
 INSTALL_DIR="${INSTALL_DIR:-$DEFAULT_INSTALL_DIR}"
 
 # Expand ~ if the user typed it
@@ -73,7 +75,15 @@ echo ""
 # 2. Extract payload (base64-encoded tar.gz)
 # ---------------------------------------------------------------
 echo "Extracting scripts..."
-echo "__PAYLOAD_BASE64__" | base64 -d | tar -xzf - -C "$INSTALL_DIR"
+PART1
+
+# Part 2: the payload variable (inlined directly, no sed)
+B64=$(base64 -w0 "$PAYLOAD")
+echo "PAYLOAD_B64='${B64}'" >> "$OUT"
+
+# Part 3: rest of the installer
+cat >> "$OUT" << 'PART3'
+echo "$PAYLOAD_B64" | base64 -d | tar -xzf - -C "$INSTALL_DIR"
 chmod +x "$INSTALL_DIR"/*
 echo -e "  -> ${GREEN}Done${RESET}"
 echo ""
@@ -152,11 +162,10 @@ echo ""
 echo -e "  Run ${CYAN}condor --help${RESET} to get started."
 echo -e "  You may need to ${YELLOW}source ~/.bashrc${RESET} or open a new terminal."
 echo ""
-INSTALLER_HEADER
 
-# Replace the placeholder with the actual base64-encoded payload
-B64=$(base64 -w0 "$PAYLOAD")
-sed -i "s|__PAYLOAD_BASE64__|${B64}|" "$OUT"
+exit 0
+}
+PART3
 
 chmod +x "$OUT"
 echo "Built installer: $OUT ($(du -h "$OUT" | cut -f1))"

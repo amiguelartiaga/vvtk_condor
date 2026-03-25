@@ -96,9 +96,8 @@ Create a script that receives a job index as its last argument:
 
 ```bash
 echo 'import sys
-n = sys.argv[1]
-i = sys.argv[2]
-print(f"entering job {i+1}/{n}")' > job.py
+i = int(sys.argv[1])
+print(f"entering job {i+1}")' > job.py
 ```
 
 Submit 5 indexed jobs (each receives 0..4 as its last argument):
@@ -134,13 +133,12 @@ Create a script that processes each file passed as its last argument:
 echo 'import sys
 f = sys.argv[1]
 print(f"processing {f}")' > process.py
-chmod +x process.py
 ```
 
 Submit one job per line in the list:
 
 ```bash
-condor_list python process.py filelist.txt
+condor_list --cpu python process.py filelist.txt
 ```
 
 Each job will print `processing file1`, `processing file2`, etc.
@@ -149,4 +147,5 @@ Check individual outputs:
 ```bash
 cat .condor/python_process.py_filelist.txt_000.log   # output for file1
 cat .condor/python_process.py_filelist.txt_001.log   # output for file2
+cat .condor/python_process.py_filelist.txt_002.log   # output for file3
 ```
