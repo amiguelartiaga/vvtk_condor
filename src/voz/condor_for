@@ -1,15 +1,73 @@
 #!/bin/bash
 
 #-------------------------------------------------------------------
-# parse --block/--noblock (default: --block)
-BLOCK_MODE="block"
-if [[ "$1" == "--noblock" ]]; then
-    BLOCK_MODE="noblock"
-    shift
-elif [[ "$1" == "--block" ]]; then
-    BLOCK_MODE="block"
-    shift
+# help / no-args guard
+if [[ $# -eq 0 || "$1" == "--help" || "$1" == "-h" ]]; then
+    cat <<'HELP'
+Usage: condor_for [OPTIONS] EXECUTABLE [ARGS...] N_JOBS
+
+Submit N_JOBS indexed jobs to HTCondor. Each job receives its index (0..N-1)
+as the last argument. Defaults: GPU enabled, 2000 MB, blocking and any node.
+
+Options:
+  --noblock    Return immediately instead of waiting for jobs to finish
+  --nogpu      Disable GPU and request only 500 MB memory (alias: --cpu)
+  --memory N   Request N MB of memory explicitly
+  --nice       Run as nice user (lower priority)
+  --local      Pin jobs to the current machine ($HOSTNAME)
+  --help       Show this help message
+
+Examples:
+  condor_for my_script.sh 10                        # 10 GPU jobs, blocking
+  condor_for --noblock my_script.sh --arg1 10       # 10 GPU jobs, non-blocking
+  condor_for --nogpu my_script.sh 20                # 20 CPU-only jobs
+  condor_for --nice --local my_script.sh 5          # 5 nice GPU jobs, local
+  condor_for --memory 4000 my_script.sh 10          # 10 jobs with 4 GB
+HELP
+    exit 0
 fi
+
+#-------------------------------------------------------------------
+# parse options: --noblock, --nogpu, --memory, --nice, --local
+BLOCK_MODE="block"
+GPU_MODE=1
+NICE_MODE=false
+LOCAL_MODE=false
+REQUEST_MEMORY=2000
+
+while [[ "$1" == --* ]]; do
+    case "$1" in
+        --noblock)
+            BLOCK_MODE="noblock"
+            shift
+            ;;
+        --nogpu|--cpu)
+            GPU_MODE=0
+            REQUEST_MEMORY=500
+            shift
+            ;;
+        --memory)
+            if [[ -z "$2" || "$2" == --* ]]; then
+                echo "ERROR: --memory requires a value in MB"
+                exit 1
+            fi
+            REQUEST_MEMORY="$2"
+            shift
+            shift
+            ;;
+        --nice)
+            NICE_MODE=true
+            shift
+            ;;
+        --local)
+            LOCAL_MODE=true
+            shift
+            ;;
+        *)
+            break
+            ;;
+    esac
+done
 
 file=$1
 n_jobs=${@: -1}
@@ -20,7 +78,6 @@ mkdir -p .condor/
 
 #-------------------------------------------------------------------
 # base filename
-#file_condor_base="${file%.*}"
 args="$*"
 args=${args// /_} 
 args=${args//-/_} 
@@ -47,12 +104,50 @@ fi
 
 #-------------------------------------------------------------------
 # create condor config
-
 condor_task=.condor/${file_condor_base}.sub
 
-#::::::::::::::::::::::::::::::::::::::::::
-cat > ${condor_task} << EOF
+#-------------------------------------------------------------------
+if [ -f condor.cfg ];
+then
+    echo "condor.cfg exists."
+    cp condor.cfg ${condor_task} 
+else
+   echo "condor.cfg does not exist, creating default"
 
+   # build nice_user line
+   if [[ "$NICE_MODE" == true ]]; then
+       NICE_LINE="nice_user             = True"
+   else
+       NICE_LINE="#nice_user             = True"
+   fi
+
+#::::::::::::::::::::::::::::::::::::::::::
+cat > ${condor_task}  << EOF
+
+universe              = vanilla
+notification          = Never 
+${NICE_LINE}
+getenv                = True
+request_cpus          = 1
+request_gpus          = ${GPU_MODE}
+request_memory        = ${REQUEST_MEMORY} 
+should_transfer_files = no
+
+EOF
+#::::::::::::::::::::::::::::::::::::::::::
+fi
+
+#-------------------------------------------------------------------
+# if --local, pin jobs to the current machine
+if [[ "$LOCAL_MODE" == true ]]; then
+    echo "requirements   = TARGET.Machine == \"${HOSTNAME}\"" >> ${condor_task}
+fi
+
+#-------------------------------------------------------------------
+# append executable, arguments and per-job queue entries
+
+#::::::::::::::::::::::::::::::::::::::::::
+cat >> ${condor_task} << EOF
 executable = `which ${file}`
 arguments  = ${@:2} \$(icluster)
 output     = .condor/${file_condor_base}_\$(ifile).log
@@ -63,7 +158,7 @@ EOF
 #::::::::::::::::::::::::::::::::::::::::::
 
 for((i=0;i<$n_jobs;i++)); do
-	  ifile=`echo $i | awk '{ printf("%03d",$1);}'`
+  ifile=`echo $i | awk '{ printf("%03d",$1);}'`
       echo "
       ifile = $ifile
       icluster = $i
@@ -92,8 +187,6 @@ if [[ "$BLOCK_MODE" == "block" ]]; then
 else
     _condor_submit.sh --config ${condor_task}
 fi
-
-
 
 #-------------------------------------------------------------------
 # log

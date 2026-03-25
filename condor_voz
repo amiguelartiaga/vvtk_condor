@@ -1,0 +1,118 @@
+#!/bin/bash
+# ============================================================================
+#  condor_voz — interactive installer for vvtk_condor tools
+#
+#  Install:  curl -fsSL <URL>/condor_voz | bash
+#        or: bash condor_voz
+# ============================================================================
+set -e
+
+BOLD='\e[1m'
+GREEN='\e[1;32m'
+YELLOW='\e[1;33m'
+CYAN='\e[1;36m'
+RESET='\e[0m'
+
+echo -e "${BOLD}======================================${RESET}"
+echo -e "${GREEN}  condor_voz installer${RESET}"
+echo -e "${BOLD}======================================${RESET}"
+echo ""
+
+# ---------------------------------------------------------------
+# 1. Installation directory
+# ---------------------------------------------------------------
+DEFAULT_INSTALL_DIR="$HOME/.local/bin"
+echo -e "${CYAN}Where should the scripts be installed?${RESET}"
+read -rp "  Install directory [$DEFAULT_INSTALL_DIR]: " INSTALL_DIR < /dev/tty
+INSTALL_DIR="${INSTALL_DIR:-$DEFAULT_INSTALL_DIR}"
+
+# Expand ~ if the user typed it
+INSTALL_DIR="${INSTALL_DIR/#\~/$HOME}"
+
+mkdir -p "$INSTALL_DIR"
+echo -e "  -> ${GREEN}$INSTALL_DIR${RESET}"
+echo ""
+
+# ---------------------------------------------------------------
+# 2. Extract payload (base64-encoded tar.gz)
+# ---------------------------------------------------------------
+echo "Extracting scripts..."
+echo "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" | base64 -d | tar -xzf - -C "$INSTALL_DIR"
+chmod +x "$INSTALL_DIR"/*
+echo -e "  -> ${GREEN}Done${RESET}"
+echo ""
+
+# ---------------------------------------------------------------
+# 3. Offer to add INSTALL_DIR to PATH in .bashrc
+# ---------------------------------------------------------------
+BASHRC="$HOME/.bashrc"
+PATH_LINE="export PATH=\"\$PATH:$INSTALL_DIR\""
+
+if echo "$PATH" | tr ':' '\n' | grep -qx "$INSTALL_DIR"; then
+    echo -e "${GREEN}$INSTALL_DIR is already in your PATH.${RESET}"
+elif [[ -f "$BASHRC" ]] && grep -qF "$INSTALL_DIR" "$BASHRC"; then
+    echo -e "${GREEN}$INSTALL_DIR is already referenced in $BASHRC.${RESET}"
+else
+    echo -e "${CYAN}Add $INSTALL_DIR to PATH in $BASHRC?${RESET}"
+    read -rp "  [Y/n]: " ADD_PATH < /dev/tty
+    ADD_PATH="${ADD_PATH:-Y}"
+    if [[ "$ADD_PATH" =~ ^[Yy] ]]; then
+        echo "" >> "$BASHRC"
+        echo "# condor_voz tools" >> "$BASHRC"
+        echo "$PATH_LINE" >> "$BASHRC"
+        echo -e "  -> ${GREEN}Added to $BASHRC${RESET}"
+    else
+        echo -e "  -> ${YELLOW}Skipped. Add manually:${RESET}  $PATH_LINE"
+    fi
+fi
+echo ""
+
+# ---------------------------------------------------------------
+# 4. Offer to add HTCondor system paths to .bashrc
+# ---------------------------------------------------------------
+CONDOR_PATH_LINE='export PATH="$PATH:/usr/local/condor/x86_64/bin/"'
+CONDOR_SOURCE_LINE='source /usr/local/condor/condor.sh'
+
+NEED_CONDOR_SETUP=false
+if [[ -f "$BASHRC" ]]; then
+    grep -qF '/usr/local/condor' "$BASHRC" || NEED_CONDOR_SETUP=true
+else
+    NEED_CONDOR_SETUP=true
+fi
+
+if [[ "$NEED_CONDOR_SETUP" == true ]]; then
+    echo -e "${CYAN}Add HTCondor system paths to $BASHRC?${RESET}"
+    echo "  This will add:"
+    echo "    $CONDOR_PATH_LINE"
+    echo "    $CONDOR_SOURCE_LINE"
+    read -rp "  [Y/n]: " ADD_CONDOR < /dev/tty
+    ADD_CONDOR="${ADD_CONDOR:-Y}"
+    if [[ "$ADD_CONDOR" =~ ^[Yy] ]]; then
+        echo "" >> "$BASHRC"
+        echo "# HTCondor system paths" >> "$BASHRC"
+        echo "$CONDOR_PATH_LINE" >> "$BASHRC"
+        echo "$CONDOR_SOURCE_LINE" >> "$BASHRC"
+        echo -e "  -> ${GREEN}Added to $BASHRC${RESET}"
+    else
+        echo -e "  -> ${YELLOW}Skipped.${RESET}"
+    fi
+else
+    echo -e "${GREEN}HTCondor paths already configured in $BASHRC.${RESET}"
+fi
+echo ""
+
+# ---------------------------------------------------------------
+# 5. Summary
+# ---------------------------------------------------------------
+echo -e "${BOLD}======================================${RESET}"
+echo -e "${GREEN}  Installation complete!${RESET}"
+echo -e "${BOLD}======================================${RESET}"
+echo ""
+echo "  Installed scripts:"
+ls -1 "$INSTALL_DIR"/condor* "$INSTALL_DIR"/_condor_submit.sh 2>/dev/null | while read -r f; do
+    echo "    $(basename "$f")"
+done
+echo ""
+echo -e "  Run ${CYAN}condor --help${RESET} to get started."
+echo -e "  You may need to ${YELLOW}source ~/.bashrc${RESET} or open a new terminal."
+echo ""

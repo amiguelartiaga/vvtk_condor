@@ -1,0 +1,3 @@
+#!/bin/bash
+# CPU-only condor job pinned to current machine
+exec condor --nogpu --local "$@"

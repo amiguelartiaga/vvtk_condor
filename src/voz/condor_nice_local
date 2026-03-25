@@ -1,0 +1,3 @@
+#!/bin/bash
+# Nice GPU condor job pinned to current machine
+exec condor --nice --local "$@"

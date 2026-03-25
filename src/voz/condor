@@ -1,15 +1,79 @@
 #!/bin/bash
 
 #-------------------------------------------------------------------
-# parse --block/--noblock (default: --block)
-BLOCK_MODE="block"
-if [[ "$1" == "--noblock" ]]; then
-    BLOCK_MODE="noblock"
-    shift
-elif [[ "$1" == "--block" ]]; then
-    BLOCK_MODE="block"
-    shift
+# help / no-args guard
+if [[ $# -eq 0 || "$1" == "--help" || "$1" == "-h" ]]; then
+    cat <<'HELP'
+Usage: condor [OPTIONS] EXECUTABLE [ARGS...]
+
+Submit a job to HTCondor. Defaults: GPU enabled, 2000 MB, blocking and any node.
+
+Options:
+  --noblock   Return immediately instead of waiting for the job to finish
+  --nogpu     Disable GPU and request only 500 MB memory (alias: --cpu) useful for scripting
+    --memory N  Request N MB of memory explicitly
+  --nice      Run as nice user (lower priority)
+  --local     Pin the job to the current machine ($HOSTNAME)
+  --help      Show this help message
+
+Examples:
+  condor my_script.sh                        # GPU job, blocking
+  condor --noblock my_script.sh arg1 arg2    # GPU job, non-blocking
+  condor --nogpu my_script.sh                # CPU-only job, blocking
+    condor --memory 2000 my_script.sh          # Explicitly request 2000 MB
+  condor --nice --local my_script.sh         # Nice GPU job pinned to this machine
+  condor --nogpu --local my_script.sh -x 5   # CPU job pinned locally with args
+
+One-liner wrappers:
+  condor_cpu        →  condor --nogpu
+  condor_nice       →  condor --nice
+  condor_local      →  condor --local
+  condor_cpu_local  →  condor --nogpu --local
+  condor_nice_local →  condor --nice --local
+HELP
+    exit 0
 fi
+
+#-------------------------------------------------------------------
+# parse options: --noblock, --nogpu, --memory, --nice, --local
+BLOCK_MODE="block"
+GPU_MODE=1
+NICE_MODE=false
+LOCAL_MODE=false
+REQUEST_MEMORY=500
+
+while [[ "$1" == --* ]]; do
+    case "$1" in
+        --noblock)
+            BLOCK_MODE="noblock"
+            shift
+            ;;
+        --nogpu|--cpu)
+            GPU_MODE=0
+            shift
+            ;;
+        --memory)
+            if [[ -z "$2" || "$2" == --* ]]; then
+                echo "ERROR: --memory requires a value in MB"
+                exit 1
+            fi
+            REQUEST_MEMORY="$2"
+            shift
+            shift
+            ;;
+        --nice)
+            NICE_MODE=true
+            shift
+            ;;
+        --local)
+            LOCAL_MODE=true
+            shift
+            ;;
+        *)
+            break
+            ;;
+    esac
+done
 
 file=$1
 
@@ -19,7 +83,6 @@ mkdir -p .condor/
 
 #-------------------------------------------------------------------
 # base filename
-#file_condor_base="${file%.*}"
 args="$*"
 args=${args// /_} 
 args=${args//-/_} 
@@ -54,22 +117,35 @@ then
     cp condor.cfg ${condor_task} 
 else
    echo "condor.cfg does not exist, creating default"
+
+   # build nice_user line
+   if [[ "$NICE_MODE" == true ]]; then
+       NICE_LINE="nice_user             = True"
+   else
+       NICE_LINE="#nice_user             = True"
+   fi
+
 #::::::::::::::::::::::::::::::::::::::::::
 cat > ${condor_task}  << EOF
 
 universe              = vanilla
 notification          = Never 
-#nice_user             = True
+${NICE_LINE}
 getenv                = True
 request_cpus          = 1
-request_gpus          = 1
-request_memory        = 2000 
+request_gpus          = ${GPU_MODE}
+request_memory        = ${REQUEST_MEMORY} 
 should_transfer_files = no
 
 EOF
 #::::::::::::::::::::::::::::::::::::::::::
 fi
-echo "requirements   = TARGET.Machine == \"${HOSTNAME}\"" >> ${condor_task}
+
+#-------------------------------------------------------------------
+# if --local, pin the job to the current machine
+if [[ "$LOCAL_MODE" == true ]]; then
+    echo "requirements   = TARGET.Machine == \"${HOSTNAME}\"" >> ${condor_task}
+fi
 
 #-------------------------------------------------------------------
 
@@ -117,8 +193,13 @@ echo "log output: .condor/${file_condor_base}.log"
 echo "err output: .condor/${file_condor_base}.err"
 echo "-----------------------------"
 
+if [[ "$BLOCK_MODE" == "block" ]]; then
+    echo "-----------------------------"
+    echo "Job completed. "
+    cat .condor/${file_condor_base}.log
+    rm -f "$lock_file"
+fi
 
 #-------------------------------------------------------------------
 # clean
 #rm -rf .condor/
-
