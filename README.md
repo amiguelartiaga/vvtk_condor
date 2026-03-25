@@ -78,6 +78,17 @@ on this machine only:
 ```bash
 condor --local python gpu_test.py
 ```
+You can check the job status in another terminal:
+
+```
+bash condor_joblist
+```
+
+The output can be read from the log file:
+
+```bash
+cat .condor/python_gpu_test.py.log
+```
 
 ### 2. Submit an array of jobs with `condor_for`
 
@@ -85,22 +96,26 @@ Create a script that receives a job index as its last argument:
 
 ```bash
 echo 'import sys
-i = sys.argv[1]
-print(f"entering job {i}")' > job.py
+n = sys.argv[1]
+i = sys.argv[2]
+print(f"entering job {i+1}/{n}")' > job.py
 ```
 
 Submit 5 indexed jobs (each receives 0..4 as its last argument):
 
 ```bash
-condor_for python job.py 5
+condor_for --cpu python job.py 5
 ```
 
-Each job will print `entering job 0`, `entering job 1`, etc.
+Each job will print `entering job 1/5`, `entering job 2/5`, etc.
 Check individual outputs:
 
 ```bash
-cat .condor/python_job.py_5_000.log   # output of job 0
-cat .condor/python_job.py_5_001.log   # output of job 1
+cat .condor/python_job.py_5_000.log   # output of job 1
+cat .condor/python_job.py_5_001.log   # output of job 2
+cat .condor/python_job.py_5_002.log   # output of job 3
+cat .condor/python_job.py_5_003.log   # output of job 4
+cat .condor/python_job.py_5_004.log   # output of job 5
 ```
 
 ### 3. Submit jobs from a list with `condor_list`

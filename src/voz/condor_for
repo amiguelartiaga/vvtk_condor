@@ -149,7 +149,7 @@ fi
 #::::::::::::::::::::::::::::::::::::::::::
 cat >> ${condor_task} << EOF
 executable = `which ${file}`
-arguments  = ${@:2} \$(icluster)
+arguments  = ${@:2:${#}-2} \$(icluster)
 output     = .condor/${file_condor_base}_\$(ifile).log
 error      = .condor/${file_condor_base}_\$(ifile).err
 log        = .condor/${file_condor_base}.clog
