@@ -33,10 +33,10 @@ condor --help                              # Show all options
 
 | Flag        | Effect                                      | Default |
 |-------------|---------------------------------------------|---------|
-| `--nogpu`   | No GPU, 500 MB memory (alias: `--cpu`)      | GPU on  |
-| `--nice`    | Run as nice user (lower priority)            | off     |
-| `--local`   | Pin job to current machine (`$HOSTNAME`)     | off     |
-| `--noblock` | Return immediately, don't wait for the job   | block   |
+| `--nogpu`   | No GPU (alias: `--cpu`)                     | GPU on  |
+| `--nice`    | Run as nice user (lower priority)           | off     |
+| `--local`   | Pin job to current machine (`$HOSTNAME`)    | off     |
+| `--noblock` | Return immediately, don't wait for the job  | block   |
 
 ### One-liner wrappers
 
