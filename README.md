@@ -16,9 +16,10 @@ bash condor_voz
 
 The installer will:
 1. Ask for an install directory (default: `~/.local/bin`)
-2. Extract all scripts there
+2. Extract the core scripts there (`condor`, `condor_for`, `condor_list`, `condor_joblist`)
 3. Offer to add the directory to your `PATH` in `~/.bashrc`
-4. Offer to configure HTCondor system paths (`/usr/local/condor/...`)
+4. Offer to add convenience aliases such as `condor_cpu` and `condor_nice` to `~/.bashrc`
+5. Offer to configure HTCondor system paths (`/usr/local/condor/...`)
 
 Pressing Enter on every prompt accepts the defaults and gives you a working setup.
 
@@ -51,7 +52,9 @@ condor --help                              # Show all options
 | `--local`   | Pin job to current machine (`$HOSTNAME`)    | off     |
 | `--noblock` | Return immediately, don't wait for the job  | block   |
 
-### One-liner wrappers
+### Optional Aliases
+
+The installer can append these aliases to `~/.bashrc`:
 
 | Command             | Equivalent                     |
 |---------------------|--------------------------------|

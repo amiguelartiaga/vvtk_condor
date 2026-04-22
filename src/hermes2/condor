@@ -21,7 +21,7 @@ Examples:
     condor --nice my_script.sh                 # Nice job
     condor --nogpu my_script.sh -x 5           # CPU-mode job with args
 
-One-liner wrappers:
+Optional shell aliases (installer can add them to ~/.bashrc):
   condor_cpu        →  condor --nogpu
   condor_nice       →  condor --nice
 HELP
@@ -165,7 +165,19 @@ echo "-----------------------------"
 if [[ "$BLOCK_MODE" == "block" ]]; then
     echo "-----------------------------"
     echo "Job completed. "
-    cat .condor/${file_condor_base}.log
+    log_file=.condor/${file_condor_base}.log
+    if [[ -f "$log_file" ]]; then
+        line_count=$(wc -l < "$log_file")
+        if (( line_count > 100 )); then
+            head -n 20 "$log_file"
+            echo "..."
+            tail -n 20 "$log_file"
+        else
+            cat "$log_file"
+        fi
+    else
+        cat "$log_file"
+    fi
     rm -f "$lock_file"
 fi
 

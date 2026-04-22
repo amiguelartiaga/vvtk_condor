@@ -18,7 +18,11 @@ trap 'rm -rf "$TMPDIR"' EXIT
 FOUND_FILES=0
 for f in "$PACKAGE_DIR"/*; do
 	[[ -f "$f" ]] || continue
-	[[ "$(basename "$f")" == "build_installer.sh" ]] && continue
+	case "$(basename "$f")" in
+		build_installer.sh|condor_cpu|condor_nice|condor_local|condor_cpu_local|condor_nice_local)
+			continue
+			;;
+	esac
 	cp "$f" "$TMPDIR/$(basename "$f")"
 	chmod +x "$TMPDIR/$(basename "$f")"
 	FOUND_FILES=1
@@ -121,7 +125,48 @@ fi
 echo ""
 
 # ---------------------------------------------------------------
-# 4. Offer to add HTCondor system paths to .bashrc
+# 4. Offer to add convenience aliases to .bashrc
+# ---------------------------------------------------------------
+VOZ_ALIASES=(
+	"alias condor_cpu='condor --nogpu'"
+	"alias condor_nice='condor --nice'"
+	"alias condor_local='condor --local'"
+	"alias condor_cpu_local='condor --nogpu --local'"
+	"alias condor_nice_local='condor --nice --local'"
+)
+
+MISSING_VOZ_ALIASES=()
+for alias_line in "${VOZ_ALIASES[@]}"; do
+	if [[ ! -f "$BASHRC" ]] || ! grep -qF "$alias_line" "$BASHRC"; then
+		MISSING_VOZ_ALIASES+=("$alias_line")
+	fi
+done
+
+if [[ ${#MISSING_VOZ_ALIASES[@]} -gt 0 ]]; then
+	echo -e "${CYAN}Optional condor command aliases can be added to $BASHRC.${RESET}"
+	echo "  If you answer yes, these lines will be appended:"
+	for alias_line in "${MISSING_VOZ_ALIASES[@]}"; do
+		echo "    $alias_line"
+	done
+	read -rp "  Add the missing alias lines to $BASHRC? [Y/n]: " ADD_ALIASES < /dev/tty
+	ADD_ALIASES="${ADD_ALIASES:-Y}"
+	if [[ "$ADD_ALIASES" =~ ^[Yy] ]]; then
+		echo "" >> "$BASHRC"
+		echo "# condor_voz aliases" >> "$BASHRC"
+		for alias_line in "${MISSING_VOZ_ALIASES[@]}"; do
+			echo "$alias_line" >> "$BASHRC"
+		done
+		echo -e "  -> ${GREEN}Added aliases to $BASHRC${RESET}"
+	else
+		echo -e "  -> ${YELLOW}Skipped.${RESET}"
+	fi
+else
+	echo -e "${GREEN}condor command aliases already configured in $BASHRC.${RESET}"
+fi
+echo ""
+
+# ---------------------------------------------------------------
+# 5. Offer to add HTCondor system paths to .bashrc
 # ---------------------------------------------------------------
 CONDOR_BIN_DIR='/usr/local/condor/x86_64/bin'
 CONDOR_LIB_DIR='/usr/local/condor/x86_64/lib'
@@ -177,7 +222,7 @@ fi
 echo ""
 
 # ---------------------------------------------------------------
-# 5. Summary
+# 6. Summary
 # ---------------------------------------------------------------
 echo -e "${BOLD}======================================${RESET}"
 echo -e "${GREEN}  Installation complete!${RESET}"

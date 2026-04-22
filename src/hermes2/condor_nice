@@ -1,3 +1,0 @@
-#!/bin/bash
-# Nice GPU condor job
-exec condor --nice "$@"

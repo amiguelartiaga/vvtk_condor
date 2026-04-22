@@ -12,21 +12,21 @@ Options:
   --noblock   Return immediately instead of waiting for the job to finish
   --nogpu     Disable GPU (alias: --cpu) useful for scripting
   --memory N  Request N MB of memory explicitly
-    --prio      Add +Prioridad = "Alta" to the submit config
+  --prio      High prority job
   --nice      Run as nice user (lower priority)
   --local     Pin the job to the current machine ($HOSTNAME)
   --help      Show this help message
 
 Examples:
-  condor my_script.sh                        # GPU job, blocking
+  condor my_script.sh                        # GPU job, blocking 
   condor --noblock my_script.sh arg1 arg2    # GPU job, non-blocking
   condor --nogpu my_script.sh                # CPU-only job, blocking
-    condor --memory 2000 my_script.sh          # Explicitly request 2000 MB
-    condor --prio my_script.sh                 # High-priority job
+  condor --memory 2000 my_script.sh          # Explicitly request 2000 MB
+  condor --prio my_script.sh                 # High-priority job
   condor --nice --local my_script.sh         # Nice GPU job pinned to this machine
   condor --nogpu --local my_script.sh -x 5   # CPU job pinned locally with args
 
-One-liner wrappers:
+Optional shell aliases (installer can add them to ~/.bashrc):
   condor_cpu        →  condor --nogpu
   condor_nice       →  condor --nice
   condor_local      →  condor --local
@@ -207,7 +207,19 @@ echo "-----------------------------"
 if [[ "$BLOCK_MODE" == "block" ]]; then
     echo "-----------------------------"
     echo "Job completed. "
-    cat .condor/${file_condor_base}.log
+    log_file=.condor/${file_condor_base}.log
+    if [[ -f "$log_file" ]]; then
+        line_count=$(wc -l < "$log_file")
+        if (( line_count > 100 )); then
+            head -n 20 "$log_file"
+            echo "..."
+            tail -n 20 "$log_file"
+        else
+            cat "$log_file"
+        fi
+    else
+        cat "$log_file"
+    fi
     rm -f "$lock_file"
 fi
 
