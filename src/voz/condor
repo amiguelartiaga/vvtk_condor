@@ -12,6 +12,7 @@ Options:
   --noblock   Return immediately instead of waiting for the job to finish
   --nogpu     Disable GPU (alias: --cpu) useful for scripting
   --memory N  Request N MB of memory explicitly
+    --prio      Add +Prioridad = "Alta" to the submit config
   --nice      Run as nice user (lower priority)
   --local     Pin the job to the current machine ($HOSTNAME)
   --help      Show this help message
@@ -21,6 +22,7 @@ Examples:
   condor --noblock my_script.sh arg1 arg2    # GPU job, non-blocking
   condor --nogpu my_script.sh                # CPU-only job, blocking
     condor --memory 2000 my_script.sh          # Explicitly request 2000 MB
+    condor --prio my_script.sh                 # High-priority job
   condor --nice --local my_script.sh         # Nice GPU job pinned to this machine
   condor --nogpu --local my_script.sh -x 5   # CPU job pinned locally with args
 
@@ -35,11 +37,12 @@ HELP
 fi
 
 #-------------------------------------------------------------------
-# parse options: --noblock, --nogpu, --memory, --nice, --local
+# parse options: --noblock, --nogpu, --memory, --prio, --nice, --local
 BLOCK_MODE="block"
 GPU_MODE=1
 NICE_MODE=false
 LOCAL_MODE=false
+PRIO_MODE=false
 REQUEST_MEMORY=500
 
 while [[ "$1" == --* ]]; do
@@ -59,6 +62,10 @@ while [[ "$1" == --* ]]; do
             fi
             REQUEST_MEMORY="$2"
             shift
+            shift
+            ;;
+        --prio)
+            PRIO_MODE=true
             shift
             ;;
         --nice)
@@ -145,6 +152,10 @@ fi
 # if --local, pin the job to the current machine
 if [[ "$LOCAL_MODE" == true ]]; then
     echo "requirements   = TARGET.Machine == \"${HOSTNAME}\"" >> ${condor_task}
+fi
+
+if [[ "$PRIO_MODE" == true ]]; then
+    echo '+Prioridad = "Alta"' >> ${condor_task}
 fi
 
 #-------------------------------------------------------------------

@@ -72,8 +72,12 @@ Submit it:
 condor python gpu_test.py
 ```
 
-This will block until the job finishes and print the output.
 You can check the job status in another terminal:
+
+```bash
+condor_joblist
+```
+
 
 For a more informative python script:
 ```bash
@@ -85,7 +89,7 @@ print(f"CUDA available: {torch.cuda.is_available()}")
 print(f"CUDA DEVICE: {os.getenv('CUDA_VISIBLE_DEVICES', 'all')}")
 x = torch.randn(5).to("cuda")
 print(x)
-time.sleep(30)
+time.sleep(60)
 EOF
 ```
 
@@ -105,8 +109,8 @@ condor --noblock python gpu_test_info4.py
 ```
 
 You can check the job status in this terminal since we used `--noblock`:
-```
-bash condor_joblist 
+```bash
+condor_joblist
 ```
 
 The output can be read from the log file:
@@ -117,6 +121,35 @@ cat .condor/python_gpu_test_info2.py.log
 cat .condor/python_gpu_test_info3.py.log
 cat .condor/python_gpu_test_info4.py.log
 ```
+
+Lets try nice GPU jobs as well:
+
+```bash
+condor --nice --noblock python gpu_test_info1.py
+condor --nice --noblock python gpu_test_info2.py
+condor --nice --noblock python gpu_test_info3.py
+```
+
+You can check the job status in this terminal since we used `--noblock`:
+```bash
+condor_joblist
+```
+
+We add a non nice job to the queue to see the difference:
+
+```bash
+condor --noblock python gpu_test_info4.py
+```
+
+Check the job list again, in a few seconds job4 should evict one of the nice jobs:
+
+```bash
+condor_joblist
+```
+
+
+
+
 
 ### 2. Submit an array of jobs with `condor_for`
 

@@ -13,6 +13,7 @@ Options:
   --noblock    Return immediately instead of waiting for jobs to finish
   --nogpu      Disable GPU and request only 500 MB memory (alias: --cpu)
   --memory N   Request N MB of memory explicitly
+    --prio       Add +Prioridad = "Alta" to the submit config
   --nice       Run as nice user (lower priority)
   --local      Pin jobs to the current machine ($HOSTNAME)
   --help       Show this help message
@@ -23,16 +24,18 @@ Examples:
   condor_for --nogpu my_script.sh 20                # 20 CPU-only jobs
   condor_for --nice --local my_script.sh 5          # 5 nice GPU jobs, local
   condor_for --memory 4000 my_script.sh 10          # 10 jobs with 4 GB
+    condor_for --prio my_script.sh 10                 # 10 high-priority jobs
 HELP
     exit 0
 fi
 
 #-------------------------------------------------------------------
-# parse options: --noblock, --nogpu, --memory, --nice, --local
+# parse options: --noblock, --nogpu, --memory, --prio, --nice, --local
 BLOCK_MODE="block"
 GPU_MODE=1
 NICE_MODE=false
 LOCAL_MODE=false
+PRIO_MODE=false
 REQUEST_MEMORY=2000
 
 while [[ "$1" == --* ]]; do
@@ -53,6 +56,10 @@ while [[ "$1" == --* ]]; do
             fi
             REQUEST_MEMORY="$2"
             shift
+            shift
+            ;;
+        --prio)
+            PRIO_MODE=true
             shift
             ;;
         --nice)
@@ -141,6 +148,10 @@ fi
 # if --local, pin jobs to the current machine
 if [[ "$LOCAL_MODE" == true ]]; then
     echo "requirements   = TARGET.Machine == \"${HOSTNAME}\"" >> ${condor_task}
+fi
+
+if [[ "$PRIO_MODE" == true ]]; then
+    echo '+Prioridad = "Alta"' >> ${condor_task}
 fi
 
 #-------------------------------------------------------------------

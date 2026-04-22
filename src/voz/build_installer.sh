@@ -123,34 +123,56 @@ echo ""
 # ---------------------------------------------------------------
 # 4. Offer to add HTCondor system paths to .bashrc
 # ---------------------------------------------------------------
-CONDOR_PATH_LINE='export PATH="$PATH:/usr/local/condor/x86_64/bin/"'
-CONDOR_SOURCE_LINE='source /usr/local/condor/condor.sh'
+CONDOR_BIN_DIR='/usr/local/condor/x86_64/bin'
+CONDOR_LIB_DIR='/usr/local/condor/x86_64/lib'
+CONDOR_CONFIG_FILE='/usr/local/condor/x86_64/etc/condor_config'
+CONDOR_PATH_LINE='export PATH=/usr/local/condor/x86_64/bin:$PATH'
+CONDOR_LIB_LINE='export LD_LIBRARY_PATH=/usr/local/condor/x86_64/lib:$LD_LIBRARY_PATH'
+CONDOR_CONFIG_LINE='export CONDOR_CONFIG=/usr/local/condor/x86_64/etc/condor_config'
+
+path_has_entry() {
+	printf '%s' "$1" | tr ':' '\n' | sed 's:/*$::' | grep -qx "$2"
+}
 
 NEED_CONDOR_SETUP=false
+NEED_CONDOR_BIN=false
+NEED_CONDOR_LIB=false
+NEED_CONDOR_CONFIG=false
+
 if [[ -f "$BASHRC" ]]; then
-	grep -qF '/usr/local/condor' "$BASHRC" || NEED_CONDOR_SETUP=true
+	grep -qF "$CONDOR_BIN_DIR" "$BASHRC" || NEED_CONDOR_BIN=true
+	grep -qF "$CONDOR_LIB_DIR" "$BASHRC" || NEED_CONDOR_LIB=true
+	grep -qF "$CONDOR_CONFIG_FILE" "$BASHRC" || NEED_CONDOR_CONFIG=true
 else
+	NEED_CONDOR_BIN=true
+	NEED_CONDOR_LIB=true
+	NEED_CONDOR_CONFIG=true
+fi
+
+if [[ "$NEED_CONDOR_BIN" == true || "$NEED_CONDOR_LIB" == true || "$NEED_CONDOR_CONFIG" == true ]]; then
 	NEED_CONDOR_SETUP=true
 fi
 
 if [[ "$NEED_CONDOR_SETUP" == true ]]; then
-	echo -e "${CYAN}Add HTCondor system paths to $BASHRC?${RESET}"
-	echo "  This will add:"
-	echo "    $CONDOR_PATH_LINE"
-	echo "    $CONDOR_SOURCE_LINE"
-	read -rp "  [Y/n]: " ADD_CONDOR < /dev/tty
+	echo -e "${CYAN}Missing HTCondor configuration detected in $BASHRC.${RESET}"
+	echo "  If you answer yes, these lines will be appended:"
+	[[ "$NEED_CONDOR_BIN" == true ]] && echo "    $CONDOR_PATH_LINE"
+	[[ "$NEED_CONDOR_LIB" == true ]] && echo "    $CONDOR_LIB_LINE"
+	[[ "$NEED_CONDOR_CONFIG" == true ]] && echo "    $CONDOR_CONFIG_LINE"
+	read -rp "  Add the missing lines to $BASHRC? [Y/n]: " ADD_CONDOR < /dev/tty
 	ADD_CONDOR="${ADD_CONDOR:-Y}"
 	if [[ "$ADD_CONDOR" =~ ^[Yy] ]]; then
 		echo "" >> "$BASHRC"
 		echo "# HTCondor system paths" >> "$BASHRC"
-		echo "$CONDOR_PATH_LINE" >> "$BASHRC"
-		echo "$CONDOR_SOURCE_LINE" >> "$BASHRC"
+		[[ "$NEED_CONDOR_BIN" == true ]] && echo "$CONDOR_PATH_LINE" >> "$BASHRC"
+		[[ "$NEED_CONDOR_LIB" == true ]] && echo "$CONDOR_LIB_LINE" >> "$BASHRC"
+		[[ "$NEED_CONDOR_CONFIG" == true ]] && echo "$CONDOR_CONFIG_LINE" >> "$BASHRC"
 		echo -e "  -> ${GREEN}Added to $BASHRC${RESET}"
 	else
 		echo -e "  -> ${YELLOW}Skipped.${RESET}"
 	fi
 else
-	echo -e "${GREEN}HTCondor paths already configured in $BASHRC.${RESET}"
+	echo -e "${GREEN}HTCondor environment already configured in $BASHRC.${RESET}"
 fi
 echo ""
 

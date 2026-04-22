@@ -93,8 +93,8 @@ condor --local python gpu_test.py
 ```
 You can check the job status in another terminal:
 
-```
-bash condor_joblist
+```bash
+condor_joblist
 ```
 
 
@@ -109,7 +109,7 @@ print(f"CUDA available: {torch.cuda.is_available()}")
 print(f"CUDA DEVICE: {os.getenv('CUDA_VISIBLE_DEVICES', 'all')}")
 x = torch.randn(5).to("cuda")
 print(x)
-time.sleep(30)
+time.sleep(60)
 EOF
 ```
 
@@ -130,7 +130,7 @@ condor --noblock python gpu_test_info4.py
 ```
 You can check the job status in this terminal since we used `--noblock`:
 ```
-bash condor_joblist
+condor_joblist
 ```
 
 The output can be read from the log file:
