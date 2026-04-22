@@ -12,21 +12,21 @@ as the last argument. Defaults: blocking and any node.
 Options:
     --noblock    Return immediately instead of waiting for jobs to finish
     --nolock     With --noblock, skip lock-file checks and creation
-    --nogpu      CPU-mode compatibility flag (alias: --cpu)
+    --cpu        CPU-mode compatibility flag
     --nice       Run as nice user (lower priority)
     --help       Show this help message
 
 Examples:
     condor_for my_script.sh 10                        # 10 blocking jobs
     condor_for --noblock my_script.sh --arg1 10       # 10 non-blocking jobs
-    condor_for --nogpu my_script.sh 20                # 20 CPU-mode jobs
+    condor_for --cpu my_script.sh 20                  # 20 CPU-mode jobs
     condor_for --nice my_script.sh 5                  # 5 nice jobs
 HELP
     exit 0
 fi
 
 #-------------------------------------------------------------------
-# parse options: --noblock, --nolock, --nogpu, --nice
+# parse options: --noblock, --nolock, --cpu, --nice
 BLOCK_MODE="block"
 NOLOCK=false
 NICE_MODE=false
@@ -41,7 +41,7 @@ while [[ "$1" == --* ]]; do
             NOLOCK=true
             shift
             ;;
-        --nogpu|--cpu)
+        --cpu)
             shift
             ;;
         --nice)

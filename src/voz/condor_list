@@ -12,7 +12,7 @@ argument. Defaults: GPU enabled, 2000 MB, blocking and any node.
 Options:
     --noblock    Return immediately instead of waiting for jobs to finish
     --nolock     With --noblock, skip lock-file checks and creation
-    --nogpu      Disable GPU and request only 500 MB memory (alias: --cpu)
+    --cpu        Disable GPU and request only 500 MB memory
     --memory N   Request N MB of memory explicitly
     --prio       Add +Prioridad = "Alta" to the submit config
     --nice       Run as nice user (lower priority)
@@ -22,7 +22,7 @@ Options:
 Examples:
     condor_list my_script.sh items.txt                    # GPU jobs, blocking
     condor_list --noblock my_script.sh items.txt          # GPU jobs, non-blocking
-    condor_list --nogpu my_script.sh items.txt            # CPU-only jobs
+    condor_list --cpu my_script.sh items.txt              # CPU-only jobs
     condor_list --nice --local my_script.sh items.txt     # Nice GPU jobs, local
     condor_list --memory 4000 my_script.sh items.txt      # Jobs with 4 GB
     condor_list --prio my_script.sh items.txt             # High-priority jobs
@@ -31,7 +31,7 @@ HELP
 fi
 
 #-------------------------------------------------------------------
-# parse options: --noblock, --nolock, --nogpu, --memory, --prio, --nice, --local
+# parse options: --noblock, --nolock, --cpu, --memory, --prio, --nice, --local
 BLOCK_MODE="block"
 GPU_MODE=1
 NOLOCK=false
@@ -50,7 +50,7 @@ while [[ "$1" == --* ]]; do
             NOLOCK=true
             shift
             ;;
-        --nogpu|--cpu)
+        --cpu)
             GPU_MODE=0
             REQUEST_MEMORY=500
             shift

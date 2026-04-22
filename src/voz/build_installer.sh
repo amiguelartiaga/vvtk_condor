@@ -136,10 +136,10 @@ echo ""
 # 4. Offer to add convenience aliases to .bashrc
 # ---------------------------------------------------------------
 VOZ_ALIASES=(
-	"alias condor_cpu='condor --nogpu'"
+	"alias condor_cpu='condor --cpu'"
 	"alias condor_nice='condor --nice'"
 	"alias condor_local='condor --local'"
-	"alias condor_cpu_local='condor --nogpu --local'"
+	"alias condor_cpu_local='condor --cpu --local'"
 	"alias condor_nice_local='condor --nice --local'"
 )
 

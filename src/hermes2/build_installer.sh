@@ -136,7 +136,7 @@ echo ""
 # 4. Offer to add convenience aliases to .bashrc
 # ---------------------------------------------------------------
 HERMES_ALIASES=(
-	"alias condor_cpu='condor --nogpu'"
+	"alias condor_cpu='condor --cpu'"
 	"alias condor_nice='condor --nice'"
 )
 

@@ -9,38 +9,38 @@ Usage: condor [OPTIONS] EXECUTABLE [ARGS...]
 Submit a job to HTCondor. Defaults: GPU enabled, 2000 MB, blocking and any node.
 
 Options:
-  --noblock   Return immediately instead of waiting for the job to finish
+    --noblock   Return immediately instead of waiting for the job to finish
     --nolock    With --noblock, skip lock-file checks and creation
     --gpu N     Request N GPUs explicitly
-  --nogpu     Disable GPU (alias: --cpu) useful for scripting
-  --memory N  Request N MB of memory explicitly
-  --prio      High prority job
-  --nice      Run as nice user (lower priority)
-  --local     Pin the job to the current machine ($HOSTNAME)
-  --help      Show this help message
+    --cpu       Disable GPU (alias: --gpu 0) useful for scripting
+    --memory N  Request N MB of memory explicitly
+    --prio      High prority job
+    --nice      Run as nice user (lower priority)
+    --local     Pin the job to the current machine ($HOSTNAME)
+    --help      Show this help message
 
 Examples:
     condor my_script.sh                        # GPU job, blocking 
     condor --gpu 2 my_script.sh                # Request 2 GPUs
     condor --noblock my_script.sh arg1 arg2    # GPU job, non-blocking
-    condor --nogpu my_script.sh                # CPU-only job, blocking
+    condor --cpu my_script.sh                  # CPU-only job, blocking
     condor --memory 2000 my_script.sh          # Explicitly request 2000 MB
     condor --prio my_script.sh                 # High-priority job
     condor --nice --local my_script.sh         # Nice GPU job pinned to this machine
-    condor --nogpu --local my_script.sh -x 5   # CPU job pinned locally with args
+    condor --cpu --local my_script.sh -x 5     # CPU job pinned locally with args
 
 Optional shell aliases (installer can add them to ~/.bashrc):
-    condor_cpu        →  condor --nogpu
+    condor_cpu        →  condor --cpu
     condor_nice       →  condor --nice
     condor_local      →  condor --local
-    condor_cpu_local  →  condor --nogpu --local
+    condor_cpu_local  →  condor --cpu --local
     condor_nice_local →  condor --nice --local
 HELP
     exit 0
 fi
 
 #-------------------------------------------------------------------
-# parse options: --noblock, --nolock, --gpu, --nogpu, --memory, --prio, --nice, --local
+# parse options: --noblock, --nolock, --gpu, --cpu, --memory, --prio, --nice, --local
 BLOCK_MODE="block"
 NGPUS=1
 NOLOCK=false
@@ -68,7 +68,7 @@ while [[ "$1" == --* ]]; do
             shift
             shift
             ;;
-        --nogpu|--cpu)
+        --cpu)
             NGPUS=0
             shift
             ;;

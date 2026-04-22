@@ -37,7 +37,7 @@ bash src/hermes2/build_installer.sh
 ```bash
 condor my_script.sh                        # GPU job, blocking (default)
 condor --noblock my_script.sh arg1 arg2    # GPU job, non-blocking
-condor --nogpu my_script.sh                # CPU-only job
+condor --cpu my_script.sh                  # CPU-only job
 condor --nice my_script.sh                 # Nice GPU job on any machine
 condor --nice --local my_script.sh         # Nice GPU job on this machine
 condor --help                              # Show all options
@@ -47,7 +47,7 @@ condor --help                              # Show all options
 
 | Flag        | Effect                                      | Default |
 |-------------|---------------------------------------------|---------|
-| `--nogpu`   | No GPU (alias: `--cpu`)                     | GPU on  |
+| `--cpu`     | No GPU (alias: `--gpu 0`)                  | GPU on  |
 | `--nice`    | Run as nice user (lower priority)           | off     |
 | `--local`   | Pin job to current machine (`$HOSTNAME`)    | off     |
 | `--noblock` | Return immediately, don't wait for the job  | block   |
@@ -58,10 +58,10 @@ The installer can append these aliases to `~/.bashrc`:
 
 | Command             | Equivalent                     |
 |---------------------|--------------------------------|
-| `condor_cpu`        | `condor --nogpu`               |
+| `condor_cpu`        | `condor --cpu`                 |
 | `condor_nice`       | `condor --nice`                |
 | `condor_local`      | `condor --local`               |
-| `condor_cpu_local`  | `condor --nogpu --local`       |
+| `condor_cpu_local`  | `condor --cpu --local`         |
 | `condor_nice_local` | `condor --nice --local`        |
 
 ### Loop & monitor tools
