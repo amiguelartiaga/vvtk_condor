@@ -1,0 +1,100 @@
+#!/bin/bash
+
+#-------------------------------------------------------------------
+# help / no-args guard
+if [[ $# -eq 0 || "$1" == "--help" || "$1" == "-h" ]]; then
+    cat <<'HELP'
+Usage: condor_reserve [OPTIONS] DURATION
+
+Reserve GPUs on the local machine by submitting non-blocking HTCondor sleep
+jobs for the requested duration.
+
+Options:
+  --gpu N     Request N GPUs explicitly (default: 1)
+  --help      Show this help message
+
+Examples:
+    condor_reserve 1m
+    condor_reserve --gpu 2 1m
+HELP
+    exit 0
+fi
+
+#-------------------------------------------------------------------
+# parse options: --gpu
+NGPUS=1
+
+while [[ "$1" == --* ]]; do
+    case "$1" in
+        --gpu)
+            if [[ -z "$2" || "$2" == --* || ! "$2" =~ ^[0-9]+$ || "$2" -lt 1 ]]; then
+                echo "ERROR: --gpu requires a positive integer value"
+                exit 1
+            fi
+            NGPUS="$2"
+            shift
+            shift
+            ;;
+        *)
+            echo "ERROR: Unknown option: $1"
+            exit 1
+            ;;
+    esac
+done
+
+if [[ $# -ne 1 ]]; then
+    echo "ERROR: condor_reserve requires exactly one duration argument"
+    exit 1
+fi
+
+DURATION="$1"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+SUBMITTER="$SCRIPT_DIR/_condor_submit.sh"
+SLEEP_BIN="$(command -v sleep)"
+
+if [[ ! -x "$SUBMITTER" ]]; then
+    echo "ERROR: Missing submit helper: $SUBMITTER"
+    exit 1
+fi
+
+if [[ -z "$SLEEP_BIN" ]]; then
+    echo "ERROR: Could not find sleep executable"
+    exit 1
+fi
+
+mkdir -p .condor/
+
+job_name="condor_reserve_${HOSTNAME}_${NGPUS}gpu_${DURATION}_$(date +%Y%m%d_%H%M%S)"
+job_name=${job_name// /_}
+job_name=${job_name//-/_}
+job_name=${job_name//\//_}
+condor_task=".condor/${job_name}.sub"
+
+cat > "$condor_task" <<EOF
+universe              = vanilla
+notification          = Never
+getenv                = True
+request_cpus          = 1
+request_gpus          = 1
+request_memory        = 500
+should_transfer_files = no
+requirements          = TARGET.Machine == "${HOSTNAME}"
++Prioridad            = "Alta"
+executable            = ${SLEEP_BIN}
+arguments             = ${DURATION}
+output                = .condor/${job_name}_$(Process).log
+error                 = .condor/${job_name}_$(Process).err
+log                   = .condor/${job_name}.clog
+queue ${NGPUS}
+EOF
+
+"$SUBMITTER" --config "$condor_task"
+
+echo "-----------------------------"
+echo "Submitted local reservation job(s)"
+echo "duration: ${DURATION}"
+echo "gpus: ${NGPUS}"
+echo "log output: .condor/${job_name}_[0-$((NGPUS-1))].log"
+echo "err output: .condor/${job_name}_[0-$((NGPUS-1))].err"
+echo "condor log: .condor/${job_name}.clog"
+echo "-----------------------------"

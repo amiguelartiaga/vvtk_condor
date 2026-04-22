@@ -10,38 +10,44 @@ Submit one job per line in LIST_FILE. Each job receives its line as the last
 argument. Defaults: GPU enabled, 2000 MB, blocking and any node.
 
 Options:
-  --noblock    Return immediately instead of waiting for jobs to finish
-  --nogpu      Disable GPU and request only 500 MB memory (alias: --cpu)
-  --memory N   Request N MB of memory explicitly
+    --noblock    Return immediately instead of waiting for jobs to finish
+    --nolock     With --noblock, skip lock-file checks and creation
+    --nogpu      Disable GPU and request only 500 MB memory (alias: --cpu)
+    --memory N   Request N MB of memory explicitly
     --prio       Add +Prioridad = "Alta" to the submit config
-  --nice       Run as nice user (lower priority)
-  --local      Pin jobs to the current machine ($HOSTNAME)
-  --help       Show this help message
+    --nice       Run as nice user (lower priority)
+    --local      Pin jobs to the current machine ($HOSTNAME)
+    --help       Show this help message
 
 Examples:
-  condor_list my_script.sh items.txt                    # GPU jobs, blocking
-  condor_list --noblock my_script.sh items.txt          # GPU jobs, non-blocking
-  condor_list --nogpu my_script.sh items.txt            # CPU-only jobs
-  condor_list --nice --local my_script.sh items.txt     # Nice GPU jobs, local
-  condor_list --memory 4000 my_script.sh items.txt      # Jobs with 4 GB
+    condor_list my_script.sh items.txt                    # GPU jobs, blocking
+    condor_list --noblock my_script.sh items.txt          # GPU jobs, non-blocking
+    condor_list --nogpu my_script.sh items.txt            # CPU-only jobs
+    condor_list --nice --local my_script.sh items.txt     # Nice GPU jobs, local
+    condor_list --memory 4000 my_script.sh items.txt      # Jobs with 4 GB
     condor_list --prio my_script.sh items.txt             # High-priority jobs
 HELP
     exit 0
 fi
 
 #-------------------------------------------------------------------
-# parse options: --noblock, --nogpu, --memory, --prio, --nice, --local
+# parse options: --noblock, --nolock, --nogpu, --memory, --prio, --nice, --local
 BLOCK_MODE="block"
 GPU_MODE=1
+NOLOCK=false
 NICE_MODE=false
 LOCAL_MODE=false
 PRIO_MODE=false
-REQUEST_MEMORY=2000
+REQUEST_MEMORY=500
 
 while [[ "$1" == --* ]]; do
     case "$1" in
         --noblock)
             BLOCK_MODE="noblock"
+            shift
+            ;;
+        --nolock)
+            NOLOCK=true
             shift
             ;;
         --nogpu|--cpu)
@@ -76,6 +82,11 @@ while [[ "$1" == --* ]]; do
     esac
 done
 
+USE_LOCK=true
+if [[ "$BLOCK_MODE" == "noblock" && "$NOLOCK" == true ]]; then
+    USE_LOCK=false
+fi
+
 file=$1
 list=${@: -1}
 n_jobs=`wc -l ${list} | awk '{ print $1 }'`
@@ -97,7 +108,7 @@ file_condor_base=$args
 # lock check: warn if a previous job with the same name is still running
 lock_file=.condor/${file_condor_base}.lock
 clog_file=.condor/${file_condor_base}.clog
-if [[ -f "$lock_file" ]]; then
+if [[ "$USE_LOCK" == true && -f "$lock_file" ]]; then
     if [[ -f "$clog_file" ]] && grep -qE '^005|^009' "$clog_file"; then
         echo "Previous job finished. Removing stale lock."
         rm -f "$lock_file"
@@ -188,14 +199,18 @@ rm -f .condor/${file_condor_base}.clog
 
 #-------------------------------------------------------------------
 # create lock file
-touch "$lock_file"
+if [[ "$USE_LOCK" == true ]]; then
+    touch "$lock_file"
+fi
 
 #-------------------------------------------------------------------
 # launch condor job
 
 if [[ "$BLOCK_MODE" == "block" ]]; then
     _condor_submit.sh --sync y --config ${condor_task}
-    rm -f "$lock_file"
+    if [[ "$USE_LOCK" == true ]]; then
+        rm -f "$lock_file"
+    fi
 else
     _condor_submit.sh --config ${condor_task}
 fi

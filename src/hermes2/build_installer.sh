@@ -92,10 +92,18 @@ PART1
 B64=$(base64 -w0 "$PAYLOAD")
 echo "PAYLOAD_B64='${B64}'" >> "$OUT"
 
+echo "INSTALL_FILES=(" >> "$OUT"
+for name in "${NAMES[@]}"; do
+	printf "'%s'\n" "$name" >> "$OUT"
+done
+echo ")" >> "$OUT"
+
 # Part 3: rest of the installer
 cat >> "$OUT" << 'PART3'
 echo "$PAYLOAD_B64" | base64 -d | tar -xzf - -C "$INSTALL_DIR"
-chmod +x "$INSTALL_DIR"/*
+for installed_file in "${INSTALL_FILES[@]}"; do
+	chmod +x "$INSTALL_DIR/$installed_file"
+done
 echo -e "  -> ${GREEN}Done${RESET}"
 echo ""
 

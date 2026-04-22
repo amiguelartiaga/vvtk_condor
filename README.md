@@ -145,6 +145,32 @@ cat .condor/python_gpu_test_info3.py.log
 cat .condor/python_gpu_test_info4.py.log
 ```
 
+Lets try nice GPU jobs as well:
+
+```bash
+condor --nice --noblock python gpu_test_info1.py
+condor --nice --noblock python gpu_test_info2.py
+condor --nice --noblock python gpu_test_info3.py
+```
+
+You can check the job status in this terminal since we used `--noblock`:
+```bash
+condor_joblist
+```
+
+We add a non nice job to the queue to see the difference:
+
+```bash
+condor --noblock python gpu_test_info4.py
+```
+
+Check the job list again, in a few seconds job4 should evict one of the nice jobs:
+
+```bash
+condor_joblist
+```
+
+
 ### 2. Submit an array of jobs with `condor_for`
 
 Create a script that receives a job index as its last argument:

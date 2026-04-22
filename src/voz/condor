@@ -10,6 +10,8 @@ Submit a job to HTCondor. Defaults: GPU enabled, 2000 MB, blocking and any node.
 
 Options:
   --noblock   Return immediately instead of waiting for the job to finish
+    --nolock    With --noblock, skip lock-file checks and creation
+    --gpu N     Request N GPUs explicitly
   --nogpu     Disable GPU (alias: --cpu) useful for scripting
   --memory N  Request N MB of memory explicitly
   --prio      High prority job
@@ -18,28 +20,30 @@ Options:
   --help      Show this help message
 
 Examples:
-  condor my_script.sh                        # GPU job, blocking 
-  condor --noblock my_script.sh arg1 arg2    # GPU job, non-blocking
-  condor --nogpu my_script.sh                # CPU-only job, blocking
-  condor --memory 2000 my_script.sh          # Explicitly request 2000 MB
-  condor --prio my_script.sh                 # High-priority job
-  condor --nice --local my_script.sh         # Nice GPU job pinned to this machine
-  condor --nogpu --local my_script.sh -x 5   # CPU job pinned locally with args
+    condor my_script.sh                        # GPU job, blocking 
+    condor --gpu 2 my_script.sh                # Request 2 GPUs
+    condor --noblock my_script.sh arg1 arg2    # GPU job, non-blocking
+    condor --nogpu my_script.sh                # CPU-only job, blocking
+    condor --memory 2000 my_script.sh          # Explicitly request 2000 MB
+    condor --prio my_script.sh                 # High-priority job
+    condor --nice --local my_script.sh         # Nice GPU job pinned to this machine
+    condor --nogpu --local my_script.sh -x 5   # CPU job pinned locally with args
 
 Optional shell aliases (installer can add them to ~/.bashrc):
-  condor_cpu        →  condor --nogpu
-  condor_nice       →  condor --nice
-  condor_local      →  condor --local
-  condor_cpu_local  →  condor --nogpu --local
-  condor_nice_local →  condor --nice --local
+    condor_cpu        →  condor --nogpu
+    condor_nice       →  condor --nice
+    condor_local      →  condor --local
+    condor_cpu_local  →  condor --nogpu --local
+    condor_nice_local →  condor --nice --local
 HELP
     exit 0
 fi
 
 #-------------------------------------------------------------------
-# parse options: --noblock, --nogpu, --memory, --prio, --nice, --local
+# parse options: --noblock, --nolock, --gpu, --nogpu, --memory, --prio, --nice, --local
 BLOCK_MODE="block"
-GPU_MODE=1
+NGPUS=1
+NOLOCK=false
 NICE_MODE=false
 LOCAL_MODE=false
 PRIO_MODE=false
@@ -51,8 +55,21 @@ while [[ "$1" == --* ]]; do
             BLOCK_MODE="noblock"
             shift
             ;;
+        --nolock)
+            NOLOCK=true
+            shift
+            ;;
+        --gpu)
+            if [[ -z "$2" || "$2" == --* || ! "$2" =~ ^[0-9]+$ ]]; then
+                echo "ERROR: --gpu requires a non-negative integer value"
+                exit 1
+            fi
+            NGPUS="$2"
+            shift
+            shift
+            ;;
         --nogpu|--cpu)
-            GPU_MODE=0
+            NGPUS=0
             shift
             ;;
         --memory)
@@ -82,6 +99,11 @@ while [[ "$1" == --* ]]; do
     esac
 done
 
+USE_LOCK=true
+if [[ "$BLOCK_MODE" == "noblock" && "$NOLOCK" == true ]]; then
+    USE_LOCK=false
+fi
+
 file=$1
 
 #-------------------------------------------------------------------
@@ -100,7 +122,7 @@ file_condor_base=$args
 # lock check: warn if a previous job with the same name is still running
 lock_file=.condor/${file_condor_base}.lock
 clog_file=.condor/${file_condor_base}.clog
-if [[ -f "$lock_file" ]]; then
+if [[ "$USE_LOCK" == true && -f "$lock_file" ]]; then
     if [[ -f "$clog_file" ]] && grep -qE '^005|^009' "$clog_file"; then
         echo "Previous job finished. Removing stale lock."
         rm -f "$lock_file"
@@ -140,7 +162,7 @@ notification          = Never
 ${NICE_LINE}
 getenv                = True
 request_cpus          = 1
-request_gpus          = ${GPU_MODE}
+request_gpus          = ${NGPUS}
 request_memory        = ${REQUEST_MEMORY} 
 should_transfer_files = no
 
@@ -183,7 +205,9 @@ rm -f .condor/${file_condor_base}.clog
 
 #-------------------------------------------------------------------
 # create lock file
-touch "$lock_file"
+if [[ "$USE_LOCK" == true ]]; then
+    touch "$lock_file"
+fi
 
 
 #-------------------------------------------------------------------
@@ -220,7 +244,9 @@ if [[ "$BLOCK_MODE" == "block" ]]; then
     else
         cat "$log_file"
     fi
-    rm -f "$lock_file"
+    if [[ "$USE_LOCK" == true ]]; then
+        rm -f "$lock_file"
+    fi
 fi
 
 #-------------------------------------------------------------------

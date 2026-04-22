@@ -9,10 +9,11 @@ Usage: condor [OPTIONS] EXECUTABLE [ARGS...]
 Submit a job to HTCondor. Defaults: blocking and any node.
 
 Options:
-  --noblock   Return immediately instead of waiting for the job to finish
-  --nogpu     Disable GPU (alias: --cpu) useful for scripting
-  --nice      Run as nice user (lower priority)
-  --help      Show this help message
+    --noblock   Return immediately instead of waiting for the job to finish
+    --nolock    With --noblock, skip lock-file checks and creation
+    --nogpu     Disable GPU (alias: --cpu) useful for scripting
+    --nice      Run as nice user (lower priority)
+    --help      Show this help message
 
 Examples:
     condor my_script.sh                        # blocking job
@@ -29,14 +30,19 @@ HELP
 fi
 
 #-------------------------------------------------------------------
-# parse options: --noblock, --nogpu, --nice
+# parse options: --noblock, --nolock, --nogpu, --nice
 BLOCK_MODE="block"
+NOLOCK=false
 NICE_MODE=false
 
 while [[ "$1" == --* ]]; do
     case "$1" in
         --noblock)
             BLOCK_MODE="noblock"
+            shift
+            ;;
+        --nolock)
+            NOLOCK=true
             shift
             ;;
         --nogpu|--cpu)
@@ -51,6 +57,11 @@ while [[ "$1" == --* ]]; do
             ;;
     esac
 done
+
+USE_LOCK=true
+if [[ "$BLOCK_MODE" == "noblock" && "$NOLOCK" == true ]]; then
+    USE_LOCK=false
+fi
 
 file=$1
 
@@ -70,7 +81,7 @@ file_condor_base=$args
 # lock check: warn if a previous job with the same name is still running
 lock_file=.condor/${file_condor_base}.lock
 clog_file=.condor/${file_condor_base}.clog
-if [[ -f "$lock_file" ]]; then
+if [[ "$USE_LOCK" == true && -f "$lock_file" ]]; then
     if [[ -f "$clog_file" ]] && grep -qE '^005|^009' "$clog_file"; then
         echo "Previous job finished. Removing stale lock."
         rm -f "$lock_file"
@@ -141,7 +152,9 @@ rm -f .condor/${file_condor_base}.clog
 
 #-------------------------------------------------------------------
 # create lock file
-touch "$lock_file"
+if [[ "$USE_LOCK" == true ]]; then
+    touch "$lock_file"
+fi
 
 
 #-------------------------------------------------------------------
@@ -178,7 +191,9 @@ if [[ "$BLOCK_MODE" == "block" ]]; then
     else
         cat "$log_file"
     fi
-    rm -f "$lock_file"
+    if [[ "$USE_LOCK" == true ]]; then
+        rm -f "$lock_file"
+    fi
 fi
 
 #-------------------------------------------------------------------
