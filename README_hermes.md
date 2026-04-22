@@ -1,17 +1,15 @@
-# vvtk_condor
+# vvtk_condor for hermes2
 
-Simplified HTCondor job submission wrappers.
+This document describes the `hermes2` variant of `vvtk_condor`.
+For the default `voz` setup and the full tutorial, see `README.md`.
 
 ## Quick Install
 
-This README documents the default `voz` setup. For the `hermes2` variant, see
-`README_hermes.md`.
-
 ```bash
-curl -fsSL http://dihana.cps.unizar.es/~cadrete/condor_voz | bash
+curl -fsSL http://dihana.cps.unizar.es/~cadrete/condor_hermes2 | bash
 
 # Or download and run locally:
-bash condor_voz
+bash condor_hermes2
 ```
 
 The installer will:
@@ -24,10 +22,7 @@ Pressing Enter on every prompt accepts the defaults and gives you a working setu
 
 ## Building installers
 
-Each package folder has its own standalone builder script. For the current `voz` tools, run:
-
 ```bash
-bash src/voz/build_installer.sh
 bash src/hermes2/build_installer.sh
 ```
 
@@ -36,9 +31,8 @@ bash src/hermes2/build_installer.sh
 ```bash
 condor my_script.sh                        # GPU job, blocking (default)
 condor --noblock my_script.sh arg1 arg2    # GPU job, non-blocking
-condor --nogpu my_script.sh                # CPU-only job
-condor --nice my_script.sh                 # Nice GPU job on any machine
-condor --nice --local my_script.sh         # Nice GPU job on this machine
+condor --nogpu my_script.sh                # CPU-only job (500 MB)
+condor --nice my_script.sh                 # Nice GPU job
 condor --help                              # Show all options
 ```
 
@@ -48,26 +42,19 @@ condor --help                              # Show all options
 |-------------|---------------------------------------------|---------|
 | `--nogpu`   | No GPU (alias: `--cpu`)                     | GPU on  |
 | `--nice`    | Run as nice user (lower priority)           | off     |
-| `--local`   | Pin job to current machine (`$HOSTNAME`)    | off     |
 | `--noblock` | Return immediately, don't wait for the job  | block   |
 
 ### One-liner wrappers
 
-| Command             | Equivalent                     |
-|---------------------|--------------------------------|
-| `condor_cpu`        | `condor --nogpu`               |
-| `condor_nice`       | `condor --nice`                |
-| `condor_local`      | `condor --local`               |
-| `condor_cpu_local`  | `condor --nogpu --local`       |
-| `condor_nice_local` | `condor --nice --local`        |
-
-### Loop & monitor tools
-
-- `condor_for` — submit an array of indexed jobs
-- `condor_list` — submit jobs from a list file
-- `condor_joblist` — show running jobs grouped by host
+| Command       | Equivalent        |
+|---------------|-------------------|
+| `condor_cpu`  | `condor --nogpu`  |
+| `condor_nice` | `condor --nice`   |
 
 ## Tutorial
+
+The workflow is the same as in `voz`, but `hermes2` does not support `--local`
+or any `*_local` helper.
 
 ### 1. Submit a single GPU job with `condor`
 
@@ -85,19 +72,8 @@ Submit it:
 condor python gpu_test.py
 ```
 
-This will block until the job finishes and print the output. You can also run it
-on this machine only:
-
-```bash
-condor --local python gpu_test.py
-```
+This will block until the job finishes and print the output.
 You can check the job status in another terminal:
-
-```
-bash condor_joblist
-```
-
-
 
 For a more informative python script:
 ```bash
@@ -120,7 +96,6 @@ cp gpu_test_info1.py gpu_test_info3.py
 cp gpu_test_info1.py gpu_test_info4.py
 ```
 
-
 And you can check again now non blocking:
 ```bash
 condor --noblock python gpu_test_info1.py
@@ -128,9 +103,10 @@ condor --noblock python gpu_test_info2.py
 condor --noblock python gpu_test_info3.py
 condor --noblock python gpu_test_info4.py
 ```
+
 You can check the job status in this terminal since we used `--noblock`:
 ```
-bash condor_joblist
+bash condor_joblist 
 ```
 
 The output can be read from the log file:

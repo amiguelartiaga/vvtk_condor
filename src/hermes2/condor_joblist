@@ -3,9 +3,7 @@ COMMAND='condor_q -nobatch -g -allusers -af:j User JobStatus Iwd RemoteHost'
 eval "${COMMAND}"                    | \
     sed 's:slot.*\@::g'              | \
     sed 's:@intra.unizar.es::g'       | \
-    sed 's:@unizar.es::g'             | \
     sed 's:.intra.unizar.es::g'       | \
-    sed 's:.unizar.es::g'             | \
     sed "s/[[:space:]]\+/ /g"        | \
     sed 's:undefined:  -  :g'         | \
     sed 's: 2 : R :g'                 | \
@@ -16,7 +14,7 @@ eval "${COMMAND}"                    | \
 cat << END
 import os
 import sys
-from collections import OrderedDict, defaultdict
+from collections import defaultdict, OrderedDict
 
 # COLOR = "\033[0;32m"
 COLOR = "\033[0;31m"

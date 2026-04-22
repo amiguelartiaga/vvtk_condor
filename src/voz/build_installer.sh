@@ -2,11 +2,12 @@
 #
 # build_installer.sh — generates the self-extracting condor_voz installer
 #
-set -e
+set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-SRC="$SCRIPT_DIR/src"
-OUT="$SCRIPT_DIR/condor_voz"
+ROOT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
+PACKAGE_DIR="$SCRIPT_DIR"
+OUT="$ROOT_DIR/condor_voz"
 REMOTE_DEST="cadrete@155.210.153.33:public_html"
 # REMOTE_DEST="cadrete@signal24:/home/cadrete/Dropbox/shared/condor"
 
@@ -14,18 +15,25 @@ REMOTE_DEST="cadrete@155.210.153.33:public_html"
 TMPDIR=$(mktemp -d)
 trap 'rm -rf "$TMPDIR"' EXIT
 
-# Copy all scripts flat into staging dir
-for f in "$SRC/voz/"*; do
-    [[ -f "$f" ]] || continue
-    cp "$f" "$TMPDIR/$(basename "$f")"
-    chmod +x "$TMPDIR/$(basename "$f")"
+FOUND_FILES=0
+for f in "$PACKAGE_DIR"/*; do
+	[[ -f "$f" ]] || continue
+	[[ "$(basename "$f")" == "build_installer.sh" ]] && continue
+	cp "$f" "$TMPDIR/$(basename "$f")"
+	chmod +x "$TMPDIR/$(basename "$f")"
+	FOUND_FILES=1
 done
+
+if [[ "$FOUND_FILES" -eq 0 ]]; then
+	echo "No package files found in $PACKAGE_DIR" >&2
+	exit 1
+fi
 
 # Build list of basenames for the tar
 NAMES=()
 for f in "$TMPDIR"/*; do
-    [[ -f "$f" ]] || continue
-    NAMES+=("$(basename "$f")")
+	[[ -f "$f" ]] || continue
+	NAMES+=("$(basename "$f")")
 done
 
 # Create the tar.gz payload
@@ -33,7 +41,6 @@ PAYLOAD="$TMPDIR/payload.tar.gz"
 tar -czf "$PAYLOAD" -C "$TMPDIR" "${NAMES[@]}"
 
 # Build the installer by writing it in parts (avoids sed on huge base64)
-# Part 1: script header + opening brace (forces bash to read all before executing)
 cat > "$OUT" << 'PART1'
 #!/bin/bash
 # ============================================================================
@@ -95,21 +102,21 @@ BASHRC="$HOME/.bashrc"
 PATH_LINE="export PATH=\"\$PATH:$INSTALL_DIR\""
 
 if echo "$PATH" | tr ':' '\n' | grep -qx "$INSTALL_DIR"; then
-    echo -e "${GREEN}$INSTALL_DIR is already in your PATH.${RESET}"
+	echo -e "${GREEN}$INSTALL_DIR is already in your PATH.${RESET}"
 elif [[ -f "$BASHRC" ]] && grep -qF "$INSTALL_DIR" "$BASHRC"; then
-    echo -e "${GREEN}$INSTALL_DIR is already referenced in $BASHRC.${RESET}"
+	echo -e "${GREEN}$INSTALL_DIR is already referenced in $BASHRC.${RESET}"
 else
-    echo -e "${CYAN}Add $INSTALL_DIR to PATH in $BASHRC?${RESET}"
-    read -rp "  [Y/n]: " ADD_PATH < /dev/tty
-    ADD_PATH="${ADD_PATH:-Y}"
-    if [[ "$ADD_PATH" =~ ^[Yy] ]]; then
-        echo "" >> "$BASHRC"
-        echo "# condor_voz tools" >> "$BASHRC"
-        echo "$PATH_LINE" >> "$BASHRC"
-        echo -e "  -> ${GREEN}Added to $BASHRC${RESET}"
-    else
-        echo -e "  -> ${YELLOW}Skipped. Add manually:${RESET}  $PATH_LINE"
-    fi
+	echo -e "${CYAN}Add $INSTALL_DIR to PATH in $BASHRC?${RESET}"
+	read -rp "  [Y/n]: " ADD_PATH < /dev/tty
+	ADD_PATH="${ADD_PATH:-Y}"
+	if [[ "$ADD_PATH" =~ ^[Yy] ]]; then
+		echo "" >> "$BASHRC"
+		echo "# condor_voz tools" >> "$BASHRC"
+		echo "$PATH_LINE" >> "$BASHRC"
+		echo -e "  -> ${GREEN}Added to $BASHRC${RESET}"
+	else
+		echo -e "  -> ${YELLOW}Skipped. Add manually:${RESET}  $PATH_LINE"
+	fi
 fi
 echo ""
 
@@ -121,29 +128,29 @@ CONDOR_SOURCE_LINE='source /usr/local/condor/condor.sh'
 
 NEED_CONDOR_SETUP=false
 if [[ -f "$BASHRC" ]]; then
-    grep -qF '/usr/local/condor' "$BASHRC" || NEED_CONDOR_SETUP=true
+	grep -qF '/usr/local/condor' "$BASHRC" || NEED_CONDOR_SETUP=true
 else
-    NEED_CONDOR_SETUP=true
+	NEED_CONDOR_SETUP=true
 fi
 
 if [[ "$NEED_CONDOR_SETUP" == true ]]; then
-    echo -e "${CYAN}Add HTCondor system paths to $BASHRC?${RESET}"
-    echo "  This will add:"
-    echo "    $CONDOR_PATH_LINE"
-    echo "    $CONDOR_SOURCE_LINE"
-    read -rp "  [Y/n]: " ADD_CONDOR < /dev/tty
-    ADD_CONDOR="${ADD_CONDOR:-Y}"
-    if [[ "$ADD_CONDOR" =~ ^[Yy] ]]; then
-        echo "" >> "$BASHRC"
-        echo "# HTCondor system paths" >> "$BASHRC"
-        echo "$CONDOR_PATH_LINE" >> "$BASHRC"
-        echo "$CONDOR_SOURCE_LINE" >> "$BASHRC"
-        echo -e "  -> ${GREEN}Added to $BASHRC${RESET}"
-    else
-        echo -e "  -> ${YELLOW}Skipped.${RESET}"
-    fi
+	echo -e "${CYAN}Add HTCondor system paths to $BASHRC?${RESET}"
+	echo "  This will add:"
+	echo "    $CONDOR_PATH_LINE"
+	echo "    $CONDOR_SOURCE_LINE"
+	read -rp "  [Y/n]: " ADD_CONDOR < /dev/tty
+	ADD_CONDOR="${ADD_CONDOR:-Y}"
+	if [[ "$ADD_CONDOR" =~ ^[Yy] ]]; then
+		echo "" >> "$BASHRC"
+		echo "# HTCondor system paths" >> "$BASHRC"
+		echo "$CONDOR_PATH_LINE" >> "$BASHRC"
+		echo "$CONDOR_SOURCE_LINE" >> "$BASHRC"
+		echo -e "  -> ${GREEN}Added to $BASHRC${RESET}"
+	else
+		echo -e "  -> ${YELLOW}Skipped.${RESET}"
+	fi
 else
-    echo -e "${GREEN}HTCondor paths already configured in $BASHRC.${RESET}"
+	echo -e "${GREEN}HTCondor paths already configured in $BASHRC.${RESET}"
 fi
 echo ""
 
@@ -156,7 +163,7 @@ echo -e "${BOLD}======================================${RESET}"
 echo ""
 echo "  Installed scripts:"
 ls -1 "$INSTALL_DIR"/condor* "$INSTALL_DIR"/_condor_submit.sh 2>/dev/null | while read -r f; do
-    echo "    $(basename "$f")"
+	echo "    $(basename "$f")"
 done
 echo ""
 echo -e "  Run ${CYAN}condor --help${RESET} to get started."
@@ -170,4 +177,5 @@ PART3
 chmod +x "$OUT"
 echo "Built installer: $OUT ($(du -h "$OUT" | cut -f1))"
 scp "$OUT" "$REMOTE_DEST"
-echo "Uploaded installer to $REMOTE_DEST"
+rm -f "$OUT"
+echo "Uploaded installer $OUT to $REMOTE_DEST"

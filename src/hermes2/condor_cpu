@@ -1,0 +1,3 @@
+#!/bin/bash
+# CPU-only condor job (no GPU, 500MB memory)
+exec condor --nogpu "$@"
