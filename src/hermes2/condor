@@ -170,6 +170,13 @@ fi
 #-------------------------------------------------------------------
 # launch condor job
 
+#-------------------------------------------------------------------
+# log
+echo "-----------------------------"    
+echo "log output: .condor/${file_condor_base}.log"
+echo "err output: .condor/${file_condor_base}.err"
+echo "-----------------------------"
+
 if [[ "$BLOCK_MODE" == "block" ]]; then
     # block until the job is done
     _condor_submit.sh --sync y --config ${condor_task}
@@ -177,13 +184,6 @@ else
     # non-blocking call
     _condor_submit.sh --config ${condor_task}
 fi
-
-#-------------------------------------------------------------------
-# log
-echo "-----------------------------"    
-echo "log output: .condor/${file_condor_base}.log"
-echo "err output: .condor/${file_condor_base}.err"
-echo "-----------------------------"
 
 if [[ "$BLOCK_MODE" == "block" ]]; then
     echo "-----------------------------"
