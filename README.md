@@ -38,7 +38,7 @@ These names are shared by the cluster-specific installers:
 - `condor` submits one job.
 - `condor_for` submits an indexed batch of jobs.
 - `condor_list` submits one job per line in an input list.
-- `condor_joblist` shows current jobs grouped by host.
+- `condor_joblist` shows current jobs grouped by host, with optional `--color 1` highlighting for your jobs.
 - `condor_reserve` reserves local GPUs with sleep jobs on `voz`.
 
 ## Pick the cluster README

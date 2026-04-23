@@ -1,3 +1,38 @@
+#!/bin/bash
+
+if [[ "$1" == "--help" || "$1" == "-h" ]]; then
+    cat <<'HELP'
+Usage: condor_joblist [--color 0|1]
+
+Show HTCondor jobs grouped by host.
+
+Options:
+  --color N   Highlight the current user's jobs in red when N=1 (default: 0)
+  --help      Show this help message
+HELP
+    exit 0
+fi
+
+COLOR_MODE=0
+
+while [[ "$1" == --* ]]; do
+    case "$1" in
+        --color)
+            if [[ -z "$2" || ! "$2" =~ ^[01]$ ]]; then
+                echo "ERROR: --color requires 0 or 1"
+                exit 1
+            fi
+            COLOR_MODE="$2"
+            shift
+            shift
+            ;;
+        *)
+            echo "ERROR: Unknown option: $1"
+            exit 1
+            ;;
+    esac
+done
+
 COMMAND='condor_q -nobatch -g -allusers -af:j User JobStatus Iwd RemoteHost'
 
 eval "${COMMAND}"                    | \
@@ -11,17 +46,17 @@ eval "${COMMAND}"                    | \
     sed 's: 2 : R :g'                 | \
     sed 's: 1 : I :g'                 | \
     sed 's: 5 : H :g'                 | \
-    sort -k 5 | python <(
+    sort -k 5 | JOBLIST_COLOR="${COLOR_MODE}" python <(
 #::::::::::::::::::::::::::::::::::::::::::
 cat << END
 import os
 import sys
 from collections import OrderedDict, defaultdict
 
-# COLOR = "\033[0;32m"
 COLOR = "\033[0;31m"
 RESET = "\033[0m"
 CURRENT_USER = os.environ.get("USER") or os.environ.get("LOGNAME") or ""
+COLOR_ENABLED = os.environ.get("JOBLIST_COLOR", "0") == "1"
 
 d = defaultdict(list)
 
@@ -40,7 +75,7 @@ def print_line(line_):
     text = format_line(line_)
     owner = line_[1]
     normalized_owner = owner.split("@", 1)[0].split(".")[-1]
-    if owner == CURRENT_USER or normalized_owner == CURRENT_USER:
+    if COLOR_ENABLED and (owner == CURRENT_USER or normalized_owner == CURRENT_USER):
         print(f"{COLOR}{text}{RESET}")
     else:
         print(text)

@@ -60,6 +60,8 @@ The installer can append these aliases to `~/.bashrc`:
 All submit wrappers append a timestamp to `.condor` file names by default. Use
 `--nodate` when you want the old fixed names instead.
 
+`condor_joblist --color 1` highlights your jobs in red. The default is `--color 0`.
+
 ## Tutorial
 
 The workflow is the same as in `voz`, but `hermes2` does not support `--local`

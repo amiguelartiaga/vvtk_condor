@@ -76,7 +76,7 @@ The installer can append these aliases to `~/.bashrc`:
 
 - `condor_for` — submit an array of indexed jobs
 - `condor_list` — submit jobs from a list file
-- `condor_joblist` — show running jobs grouped by host
+- `condor_joblist` — show running jobs grouped by host, optionally with `--color 1`
 - `condor_reserve` — reserve one or more GPUs on the current machine
 
 All submit wrappers append a timestamp to `.condor` file names by default. Use
