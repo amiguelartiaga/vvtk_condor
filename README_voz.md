@@ -1,21 +1,25 @@
-# vvtk_condor for hermes2
+# vvtk_condor
 
-This document describes the `hermes2` variant of `vvtk_condor`.
-For the general overview, see [README.md](README.md). For the default `voz`
-setup and the more complete tutorial examples, see [README_voz.md](README_voz.md).
+Simplified HTCondor job submission wrappers.
+
+For a general overview of the available clusters and the common HTCondor workflow,
+see [README.md](README.md).
 
 ## Quick Install
 
+This README documents the default `voz` setup. For the `hermes2` variant, see
+`README_hermes.md`.
+
 ```bash
-curl -fsSL http://dihana.cps.unizar.es/~cadrete/condor_hermes2 | bash
+curl -fsSL http://dihana.cps.unizar.es/~cadrete/condor_voz | bash
 
 # Or download and run locally:
-bash condor_hermes2
+bash condor_voz
 ```
 
 The installer will:
 1. Ask for an install directory (default: `~/.local/bin`)
-2. Extract the core scripts there (`condor`, `condor_for`, `condor_list`, `condor_joblist`)
+2. Extract the core scripts there (`condor`, `condor_for`, `condor_list`, `condor_joblist`, `condor_reserve`)
 3. Offer to add the directory to your `PATH` in `~/.bashrc`
 4. Offer to add convenience aliases such as `condor_cpu` and `condor_nice` to `~/.bashrc`
 5. Offer to configure HTCondor system paths (`/usr/local/condor/...`)
@@ -24,7 +28,10 @@ Pressing Enter on every prompt accepts the defaults and gives you a working setu
 
 ## Building installers
 
+Each package folder has its own standalone builder script. For the current `voz` tools, run:
+
 ```bash
+bash src/voz/build_installer.sh
 bash src/hermes2/build_installer.sh
 ```
 
@@ -33,8 +40,11 @@ bash src/hermes2/build_installer.sh
 ```bash
 condor my_script.sh                        # GPU job, blocking (default)
 condor --noblock my_script.sh arg1 arg2    # GPU job, non-blocking
-condor --cpu my_script.sh                  # CPU-only job (500 MB)
-condor --nice my_script.sh                 # Nice GPU job
+condor --cpu my_script.sh                  # CPU-only job
+condor --prio my_script.sh                 # High-priority GPU job
+condor --nice my_script.sh                 # Nice GPU job on any machine
+condor --nice --local my_script.sh         # Nice GPU job on this machine
+condor_reserve --gpu 2 1h                  # Reserve 2 local GPUs for 1 hour
 condor --help                              # Show all options
 ```
 
@@ -42,23 +52,32 @@ condor --help                              # Show all options
 
 | Flag        | Effect                                      | Default |
 |-------------|---------------------------------------------|---------|
-| `--cpu`     | No GPU                                     | GPU on  |
+| `--cpu`     | No GPU (alias: `--gpu 0`)                  | GPU on  |
+| `--prio`    | Request high-priority scheduling            | off     |
 | `--nice`    | Run as nice user (lower priority)           | off     |
+| `--local`   | Pin job to current machine (`$HOSTNAME`)    | off     |
 | `--noblock` | Return immediately, don't wait for the job  | block   |
 
 ### Optional Aliases
 
 The installer can append these aliases to `~/.bashrc`:
 
-| Command       | Equivalent        |
-|---------------|-------------------|
-| `condor_cpu`  | `condor --cpu`    |
-| `condor_nice` | `condor --nice`   |
+| Command             | Equivalent                     |
+|---------------------|--------------------------------|
+| `condor_cpu`        | `condor --cpu`                 |
+| `condor_nice`       | `condor --nice`                |
+| `condor_local`      | `condor --local`               |
+| `condor_cpu_local`  | `condor --cpu --local`         |
+| `condor_nice_local` | `condor --nice --local`        |
+
+### Loop & monitor tools
+
+- `condor_for` — submit an array of indexed jobs
+- `condor_list` — submit jobs from a list file
+- `condor_joblist` — show running jobs grouped by host
+- `condor_reserve` — reserve one or more GPUs on the current machine
 
 ## Tutorial
-
-The workflow is the same as in `voz`, but `hermes2` does not support `--local`
-or any `*_local` helper.
 
 ### 1. Submit a single GPU job with `condor`
 
@@ -76,11 +95,18 @@ Submit it:
 condor python gpu_test.py
 ```
 
+This will block until the job finishes and print the output. You can also run it
+on this machine only:
+
+```bash
+condor --local python gpu_test.py
+```
 You can check the job status in another terminal:
 
 ```bash
 condor_joblist
 ```
+
 
 
 For a more informative python script:
@@ -104,6 +130,7 @@ cp gpu_test_info1.py gpu_test_info3.py
 cp gpu_test_info1.py gpu_test_info4.py
 ```
 
+
 And you can check again now non blocking:
 ```bash
 condor --noblock python gpu_test_info1.py
@@ -111,9 +138,8 @@ condor --noblock python gpu_test_info2.py
 condor --noblock python gpu_test_info3.py
 condor --noblock python gpu_test_info4.py
 ```
-
 You can check the job status in this terminal since we used `--noblock`:
-```bash
+```
 condor_joblist
 ```
 
@@ -151,11 +177,60 @@ Check the job list again, in a few seconds job4 should evict one of the nice job
 condor_joblist
 ```
 
+### 2. Compare nice jobs with a high-priority job
+
+This example uses `sleep` directly so you can inspect the queue behavior without
+needing a separate script.
+
+Launch three long nice jobs:
+
+```bash
+condor --nice --noblock sleep 1h
+condor --nice --noblock sleep 1h
+condor --nice --noblock sleep 1h
+```
+
+Check the queue:
+
+```bash
+condor_joblist
+```
+
+Now submit one short high-priority job, without `--nice`:
+
+```bash
+condor --prio --noblock sleep 10s
+```
+
+Check the queue again:
+
+```bash
+condor_joblist
+```
+
+This is a quick way to compare how nice jobs and high-priority jobs appear in the
+queue on `voz`.
 
 
+### 3. Reserve two local GPUs
 
+Use `condor_reserve` to keep GPUs busy on the current machine with sleep jobs.
+This is useful when you want to hold local GPUs for a short interactive session.
 
-### 2. Submit an array of jobs with `condor_for`
+```bash
+condor_reserve --gpu 2 1h
+```
+
+Check the reservation jobs in the queue:
+
+```bash
+condor_joblist
+```
+
+The reservation jobs are pinned to the local host and one queued job is submitted
+per requested GPU.
+
+### 4. Submit an array of jobs with `condor_for`
 
 Create a script that receives a job index as its last argument:
 
@@ -182,7 +257,7 @@ cat .condor/python_job.py_5_003.log   # output of job 4
 cat .condor/python_job.py_5_004.log   # output of job 5
 ```
 
-### 3. Submit jobs from a list with `condor_list`
+### 5. Submit jobs from a list with `condor_list`
 
 Create a list of files to process:
 
