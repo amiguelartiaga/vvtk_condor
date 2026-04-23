@@ -12,6 +12,7 @@ argument. Defaults: GPU enabled, 2000 MB, blocking and any node.
 Options:
     --noblock    Return immediately instead of waiting for jobs to finish
     --nolock     With --noblock, skip lock-file checks and creation
+    --nodate     Use legacy log names without appending a timestamp
     --cpu        Disable GPU and request only 500 MB memory
     --memory N   Request N MB of memory explicitly
     --prio       Add +Prioridad = "Alta" to the submit config
@@ -22,6 +23,7 @@ Options:
 Examples:
     condor_list my_script.sh items.txt                    # GPU jobs, blocking
     condor_list --noblock my_script.sh items.txt          # GPU jobs, non-blocking
+    condor_list --nodate my_script.sh items.txt           # Reuse legacy non-dated log names
     condor_list --cpu my_script.sh items.txt              # CPU-only jobs
     condor_list --nice --local my_script.sh items.txt     # Nice GPU jobs, local
     condor_list --memory 4000 my_script.sh items.txt      # Jobs with 4 GB
@@ -31,10 +33,11 @@ HELP
 fi
 
 #-------------------------------------------------------------------
-# parse options: --noblock, --nolock, --cpu, --memory, --prio, --nice, --local
+# parse options: --noblock, --nolock, --nodate, --cpu, --memory, --prio, --nice, --local
 BLOCK_MODE="block"
 GPU_MODE=1
 NOLOCK=false
+APPEND_DATE=true
 NICE_MODE=false
 LOCAL_MODE=false
 PRIO_MODE=false
@@ -48,6 +51,10 @@ while [[ "$1" == --* ]]; do
             ;;
         --nolock)
             NOLOCK=true
+            shift
+            ;;
+        --nodate)
+            APPEND_DATE=false
             shift
             ;;
         --cpu)
@@ -103,6 +110,9 @@ args=${args//-/_}
 args=${args//\//_} 
 
 file_condor_base=$args
+if [[ "$APPEND_DATE" == true ]]; then
+    file_condor_base="${file_condor_base}_$(date +%Y%m%d_%H%M%S_%N)"
+fi
 
 #-------------------------------------------------------------------
 # lock check: warn if a previous job with the same name is still running

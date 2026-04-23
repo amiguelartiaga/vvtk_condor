@@ -33,6 +33,7 @@ bash src/hermes2/build_installer.sh
 ```bash
 condor my_script.sh                        # GPU job, blocking (default)
 condor --noblock my_script.sh arg1 arg2    # GPU job, non-blocking
+condor --nodate my_script.sh               # Reuse legacy fixed log names
 condor --cpu my_script.sh                  # CPU-only job (500 MB)
 condor --nice my_script.sh                 # Nice GPU job
 condor --help                              # Show all options
@@ -43,6 +44,7 @@ condor --help                              # Show all options
 | Flag        | Effect                                      | Default |
 |-------------|---------------------------------------------|---------|
 | `--cpu`     | No GPU                                     | GPU on  |
+| `--nodate`  | Keep legacy `.condor` names without date    | dated   |
 | `--nice`    | Run as nice user (lower priority)           | off     |
 | `--noblock` | Return immediately, don't wait for the job  | block   |
 
@@ -55,12 +57,19 @@ The installer can append these aliases to `~/.bashrc`:
 | `condor_cpu`  | `condor --cpu`    |
 | `condor_nice` | `condor --nice`   |
 
+All submit wrappers append a timestamp to `.condor` file names by default. Use
+`--nodate` when you want the old fixed names instead.
+
 ## Tutorial
 
 The workflow is the same as in `voz`, but `hermes2` does not support `--local`
 or any `*_local` helper.
 
 ### 1. Submit a single GPU job with `condor`
+
+```bash
+rm -rf .condor/
+```
 
 Create a small Python script that uses the GPU:
 
@@ -85,7 +94,7 @@ condor_joblist
 
 For a more informative python script:
 ```bash
-cat > gpu_test_info1.py <<'EOF'
+cat > gpu_test_info.py <<'EOF'
 import torch
 import os, socket, time
 print(f"Running on {socket.gethostname()}")
@@ -97,19 +106,15 @@ time.sleep(60)
 EOF
 ```
 
-Lets make a few more copies of the same script to have multiple jobs in the queue:
-```bash
-cp gpu_test_info1.py gpu_test_info2.py
-cp gpu_test_info1.py gpu_test_info3.py
-cp gpu_test_info1.py gpu_test_info4.py
-```
+The default dated log names let you submit the same script more than once without
+any `.condor` file clashes.
 
 And you can check again now non blocking:
 ```bash
-condor --noblock python gpu_test_info1.py
-condor --noblock python gpu_test_info2.py
-condor --noblock python gpu_test_info3.py
-condor --noblock python gpu_test_info4.py
+condor --noblock python gpu_test_info.py
+condor --noblock python gpu_test_info.py
+condor --noblock python gpu_test_info.py
+condor --noblock python gpu_test_info.py
 ```
 
 You can check the job status in this terminal since we used `--noblock`:
@@ -120,18 +125,15 @@ condor_joblist
 The output can be read from the log file:
 
 ```bash
-cat .condor/python_gpu_test_info1.py.log
-cat .condor/python_gpu_test_info2.py.log
-cat .condor/python_gpu_test_info3.py.log
-cat .condor/python_gpu_test_info4.py.log
+cat .condor/python_gpu_test_info.py_*.log
 ```
 
 Lets try nice GPU jobs as well:
 
 ```bash
-condor --nice --noblock python gpu_test_info1.py
-condor --nice --noblock python gpu_test_info2.py
-condor --nice --noblock python gpu_test_info3.py
+condor --nice --noblock python gpu_test_info.py
+condor --nice --noblock python gpu_test_info.py
+condor --nice --noblock python gpu_test_info.py
 ```
 
 You can check the job status in this terminal since we used `--noblock`:
@@ -142,7 +144,7 @@ condor_joblist
 We add a non nice job to the queue to see the difference:
 
 ```bash
-condor --noblock python gpu_test_info4.py
+condor --noblock python gpu_test_info.py
 ```
 
 Check the job list again, in a few seconds job4 should evict one of the nice jobs:
@@ -156,6 +158,10 @@ condor_joblist
 
 
 ### 2. Submit an array of jobs with `condor_for`
+
+```bash
+rm -rf .condor/
+```
 
 Create a script that receives a job index as its last argument:
 
@@ -175,14 +181,14 @@ Each job will print `entering job 1/5`, `entering job 2/5`, etc.
 Check individual outputs:
 
 ```bash
-cat .condor/python_job.py_5_000.log   # output of job 1
-cat .condor/python_job.py_5_001.log   # output of job 2
-cat .condor/python_job.py_5_002.log   # output of job 3
-cat .condor/python_job.py_5_003.log   # output of job 4
-cat .condor/python_job.py_5_004.log   # output of job 5
+cat .condor/python_job.py_5_*.log
 ```
 
 ### 3. Submit jobs from a list with `condor_list`
+
+```bash
+rm -rf .condor/
+```
 
 Create a list of files to process:
 
@@ -210,7 +216,5 @@ Each job will print `processing file1`, `processing file2`, etc.
 Check individual outputs:
 
 ```bash
-cat .condor/python_process.py_filelist.txt_000.log   # output for file1
-cat .condor/python_process.py_filelist.txt_001.log   # output for file2
-cat .condor/python_process.py_filelist.txt_002.log   # output for file3
+cat .condor/python_process.py_filelist.txt_*.log
 ```

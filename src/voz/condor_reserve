@@ -11,18 +11,21 @@ jobs for the requested duration.
 
 Options:
   --gpu N     Request N GPUs explicitly (default: 1)
+    --nodate    Use legacy log names without appending a timestamp
   --help      Show this help message
 
 Examples:
     condor_reserve 1m
+        condor_reserve --nodate 1m
     condor_reserve --gpu 2 1m
 HELP
     exit 0
 fi
 
 #-------------------------------------------------------------------
-# parse options: --gpu
+# parse options: --gpu, --nodate
 NGPUS=1
+APPEND_DATE=true
 
 while [[ "$1" == --* ]]; do
     case "$1" in
@@ -33,6 +36,10 @@ while [[ "$1" == --* ]]; do
             fi
             NGPUS="$2"
             shift
+            shift
+            ;;
+        --nodate)
+            APPEND_DATE=false
             shift
             ;;
         *)
@@ -64,7 +71,10 @@ fi
 
 mkdir -p .condor/
 
-job_name="condor_reserve_${HOSTNAME}_${NGPUS}gpu_${DURATION}_$(date +%Y%m%d_%H%M%S)"
+job_name="condor_reserve_${HOSTNAME}_${NGPUS}gpu_${DURATION}"
+if [[ "$APPEND_DATE" == true ]]; then
+    job_name="${job_name}_$(date +%Y%m%d_%H%M%S_%N)"
+fi
 job_name=${job_name// /_}
 job_name=${job_name//-/_}
 job_name=${job_name//\//_}

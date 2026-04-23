@@ -11,6 +11,7 @@ Submit a job to HTCondor. Defaults: blocking and any node.
 Options:
     --noblock   Return immediately instead of waiting for the job to finish
     --nolock    With --noblock, skip lock-file checks and creation
+    --nodate    Use legacy log names without appending a timestamp
     --cpu       Disable GPU useful for scripting
     --nice      Run as nice user (lower priority)
     --help      Show this help message
@@ -18,6 +19,7 @@ Options:
 Examples:
     condor my_script.sh                        # blocking job
     condor --noblock my_script.sh arg1 arg2    # non-blocking job
+    condor --nodate my_script.sh               # Reuse legacy non-dated log names
     condor --cpu my_script.sh                  # CPU-mode compatibility
     condor --nice my_script.sh                 # Nice job
     condor --cpu my_script.sh -x 5             # CPU-mode job with args
@@ -30,9 +32,10 @@ HELP
 fi
 
 #-------------------------------------------------------------------
-# parse options: --noblock, --nolock, --cpu, --nice
+# parse options: --noblock, --nolock, --nodate, --cpu, --nice
 BLOCK_MODE="block"
 NOLOCK=false
+APPEND_DATE=true
 NICE_MODE=false
 
 while [[ "$1" == --* ]]; do
@@ -43,6 +46,10 @@ while [[ "$1" == --* ]]; do
             ;;
         --nolock)
             NOLOCK=true
+            shift
+            ;;
+        --nodate)
+            APPEND_DATE=false
             shift
             ;;
         --cpu)
@@ -76,6 +83,9 @@ args=${args// /_}
 args=${args//-/_} 
 args=${args//\//_} 
 file_condor_base=$args
+if [[ "$APPEND_DATE" == true ]]; then
+    file_condor_base="${file_condor_base}_$(date +%Y%m%d_%H%M%S_%N)"
+fi
 
 #-------------------------------------------------------------------
 # lock check: warn if a previous job with the same name is still running

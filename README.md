@@ -22,6 +22,7 @@ The wrappers are designed for interactive cluster use:
 - GPU or CPU jobs, depending on the cluster.
 - Nice jobs for lower-priority background work.
 - High-priority or local-only jobs where supported.
+- Timestamped `.condor` files by default, with `--nodate` for legacy fixed names.
 
 ## Available clusters
 
