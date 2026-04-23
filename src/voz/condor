@@ -153,7 +153,8 @@ condor_task=.condor/${file_condor_base}.sub
 if [ -f condor.cfg ];
 then
     echo "condor.cfg exists."
-    cp condor.cfg ${condor_task} 
+    cp condor.cfg ${condor_task}
+    cat condor.cfg 
 else
    echo "condor.cfg does not exist, creating default"
 

@@ -279,3 +279,72 @@ condor_q jobid -long
 ```
 
 Print the full ClassAd for a job with all of its attributes.
+
+### 5. Advanced: configure defaults with `condor.cfg`
+
+If a `condor.cfg` file is present in the current directory, `condor` copies that
+file into the submit description and then appends the executable, arguments,
+output, error, log, and `queue` lines automatically.
+
+On `hermes2`, GPU jobs are usually requested by adding
+`+Architecture="GPU3090"` to the submit configuration.
+
+You can then run the job with the same command each time:
+
+```bash
+condor python gpu_test_info.py
+```
+
+Example 1: basic GPU job with explicit resources.
+
+```bash
+cat > condor.cfg <<'EOF'
+universe              = vanilla
+notification          = Never
+getenv                = True
+request_cpus          = 1
+request_memory        = 100
++Architecture         = "GPU3090"
+should_transfer_files = no
+EOF
+
+condor python gpu_test_info.py
+```
+
+Example 2: same job, but submitted as a nice user.
+
+```bash
+cat > condor.cfg <<'EOF'
+universe              = vanilla
+notification          = Never
+nice_user             = True
+getenv                = True
+request_cpus          = 1
+request_memory        = 100
++Architecture         = "GPU3090"
+should_transfer_files = no
+EOF
+
+condor python gpu_test_info.py
+```
+
+Example 3: nice GPU job pinned to one specific machine.
+
+```bash
+cat > condor.cfg <<'EOF'
+universe              = vanilla
+notification          = Never
+nice_user             = True
+getenv                = True
+request_cpus          = 1
+request_memory        = 100
++Architecture         = "GPU3090"
+should_transfer_files = no
+requirements = ( TARGET.Machine == "vivoidenty02.intra.unizar.es" )
+EOF
+
+condor python gpu_test_info.py
+```
+
+When you no longer want those defaults, remove or edit the local `condor.cfg`
+before the next submission.
