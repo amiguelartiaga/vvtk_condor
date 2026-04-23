@@ -218,3 +218,62 @@ Check individual outputs:
 ```bash
 cat .condor/python_process.py_filelist.txt_*.log
 ```
+
+### 4. Useful standard HTCondor commands
+
+These commands come from HTCondor itself and are useful when inspecting or
+managing jobs outside the wrapper scripts.
+
+```bash
+condor_q
+```
+
+Show the current queue for all visible jobs.
+
+```bash
+condor_rm jobid
+```
+
+Remove one job from the queue using its job id.
+
+```bash
+condor_rm username
+```
+
+Remove all queued jobs owned by `username`.
+
+```bash
+condor_rm -all
+```
+
+Remove all jobs from the queue.
+
+```bash
+condor_hold jobid
+```
+
+Put one job on hold so it stops trying to run until released.
+
+```bash
+condor_release jobid
+```
+
+Release a held job so it can return to the queue.
+
+```bash
+condor_q jobid -better
+```
+
+Explain why a specific job is not matching or starting on available machines.
+
+```bash
+condor_q jobid -hold
+```
+
+Show the hold reason for a specific job.
+
+```bash
+condor_q jobid -long
+```
+
+Print the full ClassAd for a job with all of its attributes.
