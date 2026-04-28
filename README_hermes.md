@@ -166,6 +166,19 @@ If the environment lives somewhere else, replace the activation line in
 source ~/venvs/myenv/bin/activate
 ```
 
+As a shortcut, when the active shell is already inside a `venv` or Conda
+environment you can let `condor` build that wrapper for you with `--autoenv`:
+
+```bash
+condor --autoenv python hello.py
+```
+
+This detects the active environment, locates its `activate` script via
+`which python`, and writes a small `.condor/<job>_activate.sh` wrapper that
+sources `activate` and then runs `python` with the given arguments. The job
+is submitted using that wrapper, so the cluster execution sees the same
+environment as your interactive shell.
+
 
 For a more informative python script:
 ```bash
