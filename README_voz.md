@@ -87,6 +87,8 @@ All submit wrappers append a timestamp to `.condor` file names by default. Use
 
 ### 1. Submit a single GPU job with `condor`
 
+#### Basic blocking submission
+
 ```bash
 rm -rf .condor/
 ```
@@ -116,6 +118,8 @@ You can check the job status in another terminal:
 ```bash
 condor_joblist
 ```
+
+#### Run Python with a manually activated environment
 
 If your Python code needs an environment to be activated first, submit a small
 bash wrapper instead of calling `python` directly.
@@ -190,6 +194,8 @@ If the environment lives somewhere else, replace the activation line in
 source ~/venvs/myenv/bin/activate
 ```
 
+#### Use `--autoenv` instead of writing the wrapper yourself
+
 As a shortcut, when the active shell is already inside a `venv` or Conda
 environment you can let `condor` build that wrapper for you with `--autoenv`:
 
@@ -203,6 +209,7 @@ sources `activate` and then runs `python` with the given arguments. The job
 is submitted using that wrapper, so the cluster execution sees the same
 environment as your interactive shell.
 
+#### Submit repeated non-blocking runs
 
 For a more informative python script:
 ```bash
@@ -238,6 +245,8 @@ The output can be read from the log file:
 ```bash
 cat .condor/python_gpu_test_info.py_*.log
 ```
+
+#### Compare nice jobs with a regular job
 
 Lets try nice GPU jobs as well:
 
