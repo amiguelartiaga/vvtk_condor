@@ -78,7 +78,7 @@ fi
 job_name=${job_name// /_}
 job_name=${job_name//-/_}
 job_name=${job_name//\//_}
-condor_task=".condor/${job_name}.sub"
+condor_task=".condor/${job_name}._sub"
 
 cat > "$condor_task" <<EOF
 universe              = vanilla
@@ -94,7 +94,7 @@ executable            = ${SLEEP_BIN}
 arguments             = ${DURATION}
 output                = .condor/${job_name}_$(Process).log
 error                 = .condor/${job_name}_$(Process).err
-log                   = .condor/${job_name}.clog
+log                   = .condor/${job_name}._clog
 queue ${NGPUS}
 EOF
 
@@ -106,5 +106,5 @@ echo "duration: ${DURATION}"
 echo "gpus: ${NGPUS}"
 echo "log output: .condor/${job_name}_[0-$((NGPUS-1))].log"
 echo "err output: .condor/${job_name}_[0-$((NGPUS-1))].err"
-echo "condor log: .condor/${job_name}.clog"
+echo "condor log: .condor/${job_name}._clog"
 echo "-----------------------------"

@@ -139,6 +139,7 @@ VOZ_ALIASES=(
 	"alias condor_cpu='condor --cpu'"
 	"alias condor_nice='condor --nice'"
 	"alias condor_local='condor --local'"
+	"alias condor_local_prio='condor --local --prio'"
 	"alias condor_cpu_local='condor --cpu --local'"
 	"alias condor_nice_local='condor --nice --local'"
 )

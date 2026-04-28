@@ -312,7 +312,7 @@ else
 		echo "error = $TASK_FILE.err" 
     	fi
     	if [ ! -n "$LOG" ];then
-		echo "log = $TASK_FILE.clog" 
+		echo "log = $TASK_FILE._clog" 
     	fi
     	echo "queue" 
 	fi >> $TASK_FILE

@@ -88,8 +88,8 @@ fi
 
 #-------------------------------------------------------------------
 # lock check: warn if a previous job with the same name is still running
-lock_file=.condor/${file_condor_base}.lock
-clog_file=.condor/${file_condor_base}.clog
+lock_file=.condor/${file_condor_base}._lock
+clog_file=.condor/${file_condor_base}._clog
 if [[ "$USE_LOCK" == true && -f "$lock_file" ]]; then
     if [[ -f "$clog_file" ]] && grep -qE '^005|^009' "$clog_file"; then
         echo "Previous job finished. Removing stale lock."
@@ -105,7 +105,7 @@ fi
 
 #-------------------------------------------------------------------
 # create condor config
-condor_task=.condor/${file_condor_base}.sub
+condor_task=.condor/${file_condor_base}._sub
 
 #-------------------------------------------------------------------
 if [ -f condor.cfg ];
@@ -145,7 +145,7 @@ executable = `which ${file}`
 arguments  = ${@:2:${#}-2} \$(iline)
 output     = .condor/${file_condor_base}_\$(ifile).log
 error      = .condor/${file_condor_base}_\$(ifile).err
-log        = .condor/${file_condor_base}.clog
+log        = .condor/${file_condor_base}._clog
 
 EOF
 #::::::::::::::::::::::::::::::::::::::::::
@@ -165,7 +165,7 @@ done >> ${condor_task}
 
 #-------------------------------------------------------------------
 # clean old condor log so condor_wait doesn't see stale events
-rm -f .condor/${file_condor_base}.clog
+rm -f .condor/${file_condor_base}._clog
 
 #-------------------------------------------------------------------
 # create lock file

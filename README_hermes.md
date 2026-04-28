@@ -93,6 +93,79 @@ You can check the job status in another terminal:
 condor_joblist
 ```
 
+If your Python code needs an environment to be activated first, submit a small
+bash wrapper instead of calling `python` directly.
+
+Step 1. Create a virtual environment:
+
+```bash
+python -m venv condortutorial
+```
+
+Step 2. Activate the environment:
+
+```bash
+source condortutorial/bin/activate
+```
+
+Step 3. Install the packages that your job needs:
+
+```bash
+pip install pyfiglet
+```
+
+Step 4. Create the Python script that you want to run:
+
+```bash
+cat > hello.py <<'EOF'
+import pyfiglet
+
+print(pyfiglet.figlet_format("CONDOR OK"))
+EOF
+```
+
+Step 5. Test the script locally before submitting anything:
+
+```bash
+python hello.py
+```
+
+Step 6. Create a bash wrapper that activates the environment and then runs the
+Python script. Use `#!/bin/bash` as the first line.
+
+```bash
+cat > run.sh <<'EOF'
+#!/bin/bash
+source condortutorial/bin/activate
+python hello.py
+EOF
+```
+
+Step 7. Test the wrapper locally:
+
+```bash
+bash run.sh
+```
+
+Step 8. Submit the wrapper script through Condor:
+
+```bash
+condor bash run.sh
+```
+
+Step 9. Check the output in the generated log:
+
+```bash
+cat .condor/bash_run.sh_*.log
+```
+
+If the environment lives somewhere else, replace the activation line in
+`run.sh` with the correct path. For example:
+
+```bash
+source ~/venvs/myenv/bin/activate
+```
+
 
 For a more informative python script:
 ```bash
@@ -236,19 +309,22 @@ Show the current queue for all visible jobs.
 condor_rm jobid
 ```
 
-Remove one job from the queue using its job id.
+Remove one job from the queue using its job id. Run this from the same node
+where the submission was sent.
 
 ```bash
 condor_rm username
 ```
 
-Remove all queued jobs owned by `username`.
+Remove all queued jobs owned by `username`. Run this from the same node where
+the submission was sent.
 
 ```bash
 condor_rm -all
 ```
 
-Remove all jobs from the queue.
+Remove all jobs from the queue. Run this from the same node where the
+submission was sent.
 
 ```bash
 condor_hold jobid
