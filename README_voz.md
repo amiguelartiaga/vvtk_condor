@@ -58,6 +58,7 @@ condor --help                              # Show all options
 | `--prio`    | Request high-priority scheduling            | off     |
 | `--nice`    | Run as nice user (lower priority)           | off     |
 | `--local`   | Pin job to current machine (`$HOSTNAME`)    | off     |
+| `--autoenv` | Auto-wrap `python` in the active env        | off     |
 | `--noblock` | Return immediately, don't wait for the job  | block   |
 
 ### Optional Aliases

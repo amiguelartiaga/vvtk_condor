@@ -46,6 +46,7 @@ condor --help                              # Show all options
 | `--cpu`     | No GPU                                     | GPU on  |
 | `--nodate`  | Keep legacy `.condor` names without date    | dated   |
 | `--nice`    | Run as nice user (lower priority)           | off     |
+| `--autoenv` | Auto-wrap `python` in the active env        | off     |
 | `--noblock` | Return immediately, don't wait for the job  | block   |
 
 ### Optional Aliases
