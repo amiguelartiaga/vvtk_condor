@@ -19,7 +19,7 @@ Options:
     --nice      Run as nice user (alias of --level 0)
     --level N   Priority level (0..3):
                   0 = nice job (lowest priority, may be evicted)
-                  1 = normal job (no nice, no prio)
+                  1 = normal job (evicts level 0)
                   2 = +Prioridad = "Media" (evicts level 0/1)
                   3 = +Prioridad = "Alta"  (evicts level 0/1/2)
     --local     Pin the job to the current machine ($HOSTNAME)

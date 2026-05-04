@@ -349,6 +349,8 @@ condor_joblist
 
 #### Step 2. Add two level 1 jobs (normal) — they should evict both level 0 jobs
 
+We are assuming the machine has only 2 GPUs, so the two level 1 jobs will take those slots and push the level 0 jobs back to idle.
+
 ```bash
 condor --local --level 1 --noblock sleep 5m
 condor --local --level 1 --noblock sleep 5m
