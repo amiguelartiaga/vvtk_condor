@@ -15,8 +15,13 @@ Options:
     --gpu N     Request N GPUs explicitly
     --cpu       Disable GPU (alias: --gpu 0) useful for scripting
     --memory N  Request N MB of memory explicitly
-    --prio      High prority job
-    --nice      Run as nice user (lower priority)
+    --prio      High prority job (alias of --level 3)
+    --nice      Run as nice user (alias of --level 0)
+    --level N   Priority level (0..3):
+                  0 = nice job (lowest priority, may be evicted)
+                  1 = normal job (no nice, no prio)
+                  2 = +Prioridad = "Media" (evicts level 0/1)
+                  3 = +Prioridad = "Alta"  (evicts level 0/1/2)
     --local     Pin the job to the current machine ($HOSTNAME)
     --autoenv   When EXECUTABLE is python and a venv/conda env is active,
                 wrap the job in an auto-generated activate script
@@ -29,7 +34,11 @@ Examples:
     condor --nodate my_script.sh               # Reuse legacy non-dated log names
     condor --cpu my_script.sh                  # CPU-only job, blocking
     condor --memory 2000 my_script.sh          # Explicitly request 2000 MB
-    condor --prio my_script.sh                 # High-priority job
+    condor --prio my_script.sh                 # High-priority job (level 3)
+    condor --level 0 my_script.sh              # Nice job   (lowest priority)
+    condor --level 1 my_script.sh              # Normal job (no nice, no prio)
+    condor --level 2 my_script.sh              # Media-priority job
+    condor --level 3 my_script.sh              # Alta-priority job (same as --prio)
     condor --nice --local my_script.sh         # Nice GPU job pinned to this machine
     condor --cpu --local my_script.sh -x 5     # CPU job pinned locally with args
     condor --autoenv python hello.py           # Run python inside the active venv/conda env
@@ -53,6 +62,7 @@ APPEND_DATE=true
 NICE_MODE=false
 LOCAL_MODE=false
 PRIO_MODE=false
+LEVEL=""
 REQUEST_MEMORY=500
 AUTOENV=false
 
@@ -100,6 +110,15 @@ while [[ "$1" == --* ]]; do
             NICE_MODE=true
             shift
             ;;
+        --level)
+            if [[ -z "$2" || ! "$2" =~ ^[0-3]$ ]]; then
+                echo "ERROR: --level requires an integer in 0..3"
+                exit 1
+            fi
+            LEVEL="$2"
+            shift
+            shift
+            ;;
         --local)
             LOCAL_MODE=true
             shift
@@ -117,6 +136,22 @@ done
 USE_LOCK=true
 if [[ "$BLOCK_MODE" == "noblock" && "$NOLOCK" == true ]]; then
     USE_LOCK=false
+fi
+
+# --level overrides --nice/--prio when provided
+PRIO_TAG=""
+if [[ "$PRIO_MODE" == true ]]; then
+    PRIO_TAG="Alta"
+fi
+if [[ -n "$LEVEL" ]]; then
+    NICE_MODE=false
+    PRIO_TAG=""
+    case "$LEVEL" in
+        0) NICE_MODE=true ;;
+        1) ;;
+        2) PRIO_TAG="Media" ;;
+        3) PRIO_TAG="Alta" ;;
+    esac
 fi
 
 file=$1
@@ -237,8 +272,8 @@ if [[ "$LOCAL_MODE" == true ]]; then
     echo "requirements   = TARGET.Machine == \"${HOSTNAME}\"" >> ${condor_task}
 fi
 
-if [[ "$PRIO_MODE" == true ]]; then
-    echo '+Prioridad = "Alta"' >> ${condor_task}
+if [[ -n "$PRIO_TAG" ]]; then
+    echo "+Prioridad = \"${PRIO_TAG}\"" >> ${condor_task}
 fi
 
 #-------------------------------------------------------------------

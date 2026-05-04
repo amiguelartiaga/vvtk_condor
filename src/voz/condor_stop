@@ -1,0 +1,222 @@
+#!/bin/bash
+# ============================================================================
+# condor_stop — kill HTCondor jobs from the right submitter machine
+#
+# In voz, a job can only be removed (condor_rm) from the schedd that
+# submitted it. condor_stop reads the ._info sidecar files left by the
+# wrappers (condor / condor_for / condor_list) in the current directory,
+# figures out which host owns each job, and ssh's there to run condor_rm.
+# ============================================================================
+
+set -u
+
+#-------------------------------------------------------------------
+# help
+if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
+    cat <<'HELP'
+Usage: condor_stop [JOBID | all]
+
+With no argument: scan .condor/*._info files in the current directory,
+list the jobs that still look running, and offer an interactive menu
+to choose which one to kill.
+
+  condor_stop              # interactive picker
+  condor_stop all          # kill every still-running job listed in cwd
+  condor_stop 12345        # kill cluster 12345 on the host that owns it
+                           # (looked up in .condor/*._info, or local fallback)
+  condor_stop --help       # show this help
+
+The actual removal is performed by ssh'ing to the submitter host and
+running `condor_rm <jobid>` there. Make sure passwordless ssh works to
+that host (or you'll be prompted for a password).
+HELP
+    exit 0
+fi
+
+#-------------------------------------------------------------------
+# helpers
+INFO_DIR=".condor"
+
+# parse "KEY=value" lines from an info file into bash variables
+# usage: parse_info <file>  -> sets J_JOBID J_HOSTNAME J_IP J_USER J_EXEC J_ARGS J_NJOBS J_TIME J_CONFIG J_BASE
+parse_info() {
+    local f=$1
+    J_JOBID=""; J_HOSTNAME=""; J_IP=""; J_USER=""
+    J_EXEC=""; J_ARGS=""; J_NJOBS=""; J_TIME=""; J_CONFIG=""
+    local key val line
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        key=${line%%=*}
+        val=${line#*=}
+        case "$key" in
+            JOBID)       J_JOBID=$val ;;
+            HOSTNAME)    J_HOSTNAME=$val ;;
+            IP)          J_IP=$val ;;
+            USER)        J_USER=$val ;;
+            EXECUTABLE)  J_EXEC=$val ;;
+            ARGUMENTS)   J_ARGS=$val ;;
+            NJOBS)       J_NJOBS=$val ;;
+            SUBMIT_TIME) J_TIME=$val ;;
+            CONFIG)      J_CONFIG=$val ;;
+        esac
+    done < "$f"
+    # base name (strip ._info)
+    J_BASE=${f%._info}
+}
+
+# return 0 if the job(s) still appear to be running based on the local clog
+is_running() {
+    local clog="${1}._clog"
+    if [[ ! -f "$clog" ]]; then
+        # no clog yet means it was just submitted — treat as running
+        return 0
+    fi
+    # event 005 = job terminated, 009 = aborted
+    local n_done n_queued
+    n_done=$(grep -cE '^005|^009' "$clog" 2>/dev/null)
+    [[ "$n_done" =~ ^[0-9]+$ ]] || n_done=0
+    # try to determine how many procs were queued; fall back to 1
+    n_queued=${J_NJOBS:-1}
+    [[ "$n_queued" =~ ^[0-9]+$ ]] || n_queued=1
+    if (( n_done >= n_queued )); then
+        return 1
+    fi
+    return 0
+}
+
+# ssh to host and condor_rm one or more jobids
+remote_rm() {
+    local host=$1
+    shift
+    local ids="$*"
+    if [[ -z "$host" || -z "$ids" ]]; then
+        echo "remote_rm: missing host or jobid" >&2
+        return 1
+    fi
+    echo -e "  -> \e[1;33mssh $host condor_rm $ids\e[0m"
+    if [[ "$host" == "$(hostname -f 2>/dev/null)" || "$host" == "$(hostname)" ]]; then
+        condor_rm $ids
+    else
+        ssh -o BatchMode=no -o StrictHostKeyChecking=accept-new "$host" "condor_rm $ids"
+    fi
+}
+
+#-------------------------------------------------------------------
+# Mode 1: condor_stop <jobid>
+if [[ $# -ge 1 && "$1" != "all" ]]; then
+    target=$1
+    found_host=""
+    if [[ -d "$INFO_DIR" ]]; then
+        shopt -s nullglob
+        for f in "$INFO_DIR"/*._info; do
+            parse_info "$f"
+            for jid in $J_JOBID; do
+                if [[ "$jid" == "$target" ]]; then
+                    found_host=$J_HOSTNAME
+                    break 2
+                fi
+            done
+        done
+        shopt -u nullglob
+    fi
+    if [[ -z "$found_host" ]]; then
+        echo "No ._info entry for jobid $target in $INFO_DIR. Trying local condor_rm."
+        condor_rm "$target"
+        exit $?
+    fi
+    remote_rm "$found_host" "$target"
+    exit $?
+fi
+
+#-------------------------------------------------------------------
+# Collect candidate ._info files from the current directory
+if [[ ! -d "$INFO_DIR" ]]; then
+    echo "No $INFO_DIR/ directory in $(pwd) — nothing to stop."
+    exit 0
+fi
+
+shopt -s nullglob
+INFO_FILES=( "$INFO_DIR"/*._info )
+shopt -u nullglob
+
+if [[ ${#INFO_FILES[@]} -eq 0 ]]; then
+    echo "No ._info files found in $INFO_DIR/ — nothing to stop."
+    exit 0
+fi
+
+# Build parallel arrays of running jobs only
+RUN_HOST=()
+RUN_IP=()
+RUN_JOBS=()
+RUN_EXEC=()
+RUN_ARGS=()
+RUN_TIME=()
+RUN_FILE=()
+
+for f in "${INFO_FILES[@]}"; do
+    parse_info "$f"
+    if ! is_running "$J_BASE"; then
+        continue
+    fi
+    RUN_HOST+=( "$J_HOSTNAME" )
+    RUN_IP+=(   "$J_IP" )
+    RUN_JOBS+=( "$J_JOBID" )
+    RUN_EXEC+=( "$J_EXEC" )
+    RUN_ARGS+=( "$J_ARGS" )
+    RUN_TIME+=( "$J_TIME" )
+    RUN_FILE+=( "$f" )
+done
+
+N=${#RUN_HOST[@]}
+
+if [[ $N -eq 0 ]]; then
+    echo "No running jobs detected from ._info files in $INFO_DIR/."
+    exit 0
+fi
+
+#-------------------------------------------------------------------
+# Mode 2: condor_stop all
+if [[ "${1:-}" == "all" ]]; then
+    echo -e "\e[1;31mKilling all $N running job(s) listed in $INFO_DIR/...\e[0m"
+    for ((i=0; i<N; i++)); do
+        echo "[$((i+1))/$N] ${RUN_HOST[$i]}  jobs: ${RUN_JOBS[$i]}"
+        remote_rm "${RUN_HOST[$i]}" "${RUN_JOBS[$i]}" || true
+    done
+    exit 0
+fi
+
+#-------------------------------------------------------------------
+# Mode 3: interactive menu
+echo -e "\e[1mRunning jobs found in $INFO_DIR/:\e[0m"
+echo ""
+for ((i=0; i<N; i++)); do
+    idx=$((i+1))
+    line="${RUN_IP[$i]:-?}/${RUN_HOST[$i]}  \e[1;32m${RUN_JOBS[$i]}\e[0m  ${RUN_EXEC[$i]}"
+    if [[ -n "${RUN_ARGS[$i]}" ]]; then
+        line="$line ${RUN_ARGS[$i]}"
+    fi
+    printf "  %2d) " "$idx"
+    echo -e "$line"
+done
+echo ""
+echo "  a) all"
+echo "  q) quit"
+echo ""
+read -rp "Select job to kill [1-$N / a / q]: " choice
+[[ -z "$choice" ]] && exit 0
+case "$choice" in
+    q|Q) exit 0 ;;
+    a|A|all)
+        for ((i=0; i<N; i++)); do
+            echo "[$((i+1))/$N] ${RUN_HOST[$i]}  jobs: ${RUN_JOBS[$i]}"
+            remote_rm "${RUN_HOST[$i]}" "${RUN_JOBS[$i]}" || true
+        done
+        ;;
+    *)
+        if ! [[ "$choice" =~ ^[0-9]+$ ]] || (( choice < 1 || choice > N )); then
+            echo "Invalid selection: $choice"
+            exit 1
+        fi
+        i=$((choice-1))
+        remote_rm "${RUN_HOST[$i]}" "${RUN_JOBS[$i]}"
+        ;;
+esac

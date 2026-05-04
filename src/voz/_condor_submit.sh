@@ -330,6 +330,31 @@ echo $NCLUSTERS | awk '{ printf("   - n_jobs:     \x1b[32m%d\x1b[0m\n",$1);}'
 echo $PRIO      | awk '{ printf("   - priority:   \x1b[32m%d\x1b[0m\n",$1);}'
 echo $NCLUSTERS | awk '{ printf("\x1b[31m   + condor: x%d processes\x1b[0m\n",$1);}'
 
+#---------------------------------------------------------------
+# Drop a sidecar ._info file next to the user-provided --config so that
+# condor_stop (and other tools) can map a job back to the host that
+# submitted it. The file lives at <config_basename>._info.
+if [ -n "$TASK_ID" ] && [ -n "$CONF_FILE" ] && [ -e "$CONF_FILE" ]; then
+    INFO_FILE="${CONF_FILE%.*}._info"
+    INFO_HOST=$(hostname -f 2>/dev/null || hostname)
+    INFO_IP=$(hostname -I 2>/dev/null | awk '{ print $1 }')
+    [ -z "$INFO_IP" ] && INFO_IP=$(hostname -i 2>/dev/null | awk '{ print $1 }')
+    INFO_EXEC=$(grep -m1 -E '^[[:space:]]*executable[[:space:]]*=' "$CONF_FILE" \
+                  | sed -E 's/^[[:space:]]*executable[[:space:]]*=[[:space:]]*//')
+    INFO_ARGS=$(grep -m1 -E '^[[:space:]]*arguments[[:space:]]*='   "$CONF_FILE" \
+                  | sed -E 's/^[[:space:]]*arguments[[:space:]]*=[[:space:]]*//')
+    {
+        echo "JOBID=$(echo $TASK_ID | sed 's/[[:space:]]\+$//')"
+        echo "HOSTNAME=$INFO_HOST"
+        echo "IP=$INFO_IP"
+        echo "USER=$USER"
+        echo "EXECUTABLE=$INFO_EXEC"
+        echo "ARGUMENTS=$INFO_ARGS"
+        echo "NJOBS=$NCLUSTERS"
+        echo "SUBMIT_TIME=$(date '+%Y-%m-%d %H:%M:%S')"
+        echo "CONFIG=$CONF_FILE"
+    } > "$INFO_FILE"
+fi
 
 if [ -n "$TASK_ID" ];then
 #     if [ -n "$PRIO" ];then

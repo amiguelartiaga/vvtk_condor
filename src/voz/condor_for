@@ -15,8 +15,13 @@ Options:
     --nodate     Use legacy log names without appending a timestamp
     --cpu        Disable GPU and request only 500 MB memory
     --memory N   Request N MB of memory explicitly
-    --prio       Add +Prioridad = "Alta" to the submit config
-    --nice       Run as nice user (lower priority)
+    --prio       Add +Prioridad = "Alta" to the submit config (alias of --level 3)
+    --nice       Run as nice user (alias of --level 0)
+    --level N    Priority level (0..3):
+                   0 = nice jobs   (lowest priority, may be evicted)
+                   1 = normal jobs (no nice, no prio)
+                   2 = +Prioridad = "Media" (evicts level 0/1)
+                   3 = +Prioridad = "Alta"  (evicts level 0/1/2)
     --local      Pin jobs to the current machine ($HOSTNAME)
     --help       Show this help message
 
@@ -27,7 +32,11 @@ Examples:
     condor_for --cpu my_script.sh 20                  # 20 CPU-only jobs
     condor_for --nice --local my_script.sh 5          # 5 nice GPU jobs, local
     condor_for --memory 4000 my_script.sh 10          # 10 jobs with 4 GB
-    condor_for --prio my_script.sh 10                 # 10 high-priority jobs
+    condor_for --prio my_script.sh 10                 # 10 high-priority jobs (level 3)
+    condor_for --level 0 my_script.sh 10              # 10 nice jobs   (lowest priority)
+    condor_for --level 1 my_script.sh 10              # 10 normal jobs (no nice, no prio)
+    condor_for --level 2 my_script.sh 10              # 10 Media-priority jobs
+    condor_for --level 3 my_script.sh 10              # 10 Alta-priority jobs (same as --prio)
 HELP
     exit 0
 fi
@@ -41,6 +50,7 @@ APPEND_DATE=true
 NICE_MODE=false
 LOCAL_MODE=false
 PRIO_MODE=false
+LEVEL=""
 REQUEST_MEMORY=500
 
 while [[ "$1" == --* ]]; do
@@ -79,6 +89,15 @@ while [[ "$1" == --* ]]; do
             NICE_MODE=true
             shift
             ;;
+        --level)
+            if [[ -z "$2" || ! "$2" =~ ^[0-3]$ ]]; then
+                echo "ERROR: --level requires an integer in 0..3"
+                exit 1
+            fi
+            LEVEL="$2"
+            shift
+            shift
+            ;;
         --local)
             LOCAL_MODE=true
             shift
@@ -92,6 +111,22 @@ done
 USE_LOCK=true
 if [[ "$BLOCK_MODE" == "noblock" && "$NOLOCK" == true ]]; then
     USE_LOCK=false
+fi
+
+# --level overrides --nice/--prio when provided
+PRIO_TAG=""
+if [[ "$PRIO_MODE" == true ]]; then
+    PRIO_TAG="Alta"
+fi
+if [[ -n "$LEVEL" ]]; then
+    NICE_MODE=false
+    PRIO_TAG=""
+    case "$LEVEL" in
+        0) NICE_MODE=true ;;
+        1) ;;
+        2) PRIO_TAG="Media" ;;
+        3) PRIO_TAG="Alta" ;;
+    esac
 fi
 
 file=$1
@@ -171,8 +206,8 @@ if [[ "$LOCAL_MODE" == true ]]; then
     echo "requirements   = TARGET.Machine == \"${HOSTNAME}\"" >> ${condor_task}
 fi
 
-if [[ "$PRIO_MODE" == true ]]; then
-    echo '+Prioridad = "Alta"' >> ${condor_task}
+if [[ -n "$PRIO_TAG" ]]; then
+    echo "+Prioridad = \"${PRIO_TAG}\"" >> ${condor_task}
 fi
 
 #-------------------------------------------------------------------

@@ -19,7 +19,7 @@ bash condor_voz
 
 The installer will:
 1. Ask for an install directory (default: `~/.local/bin`)
-2. Extract the core scripts there (`condor`, `condor_for`, `condor_list`, `condor_joblist`, `condor_reserve`)
+2. Extract the core scripts there (`condor`, `condor_for`, `condor_list`, `condor_stop`, `condor_joblist`, `condor_reserve`)
 3. Offer to add the directory to your `PATH` in `~/.bashrc`
 4. Offer to add convenience aliases such as `condor_cpu` and `condor_nice` to `~/.bashrc`
 5. Offer to configure HTCondor system paths (`/usr/local/condor/...`)
@@ -44,6 +44,7 @@ condor --nodate my_script.sh               # Reuse legacy fixed log names
 condor --cpu my_script.sh                  # CPU-only job
 condor --prio my_script.sh                 # High-priority GPU job
 condor --nice my_script.sh                 # Nice GPU job on any machine
+condor --level 2 my_script.sh              # Medium-priority GPU job
 condor --nice --local my_script.sh         # Nice GPU job on this machine
 condor_reserve --gpu 2 1h                  # Reserve 2 local GPUs for 1 hour
 condor --help                              # Show all options
@@ -55,8 +56,9 @@ condor --help                              # Show all options
 |-------------|---------------------------------------------|---------|
 | `--cpu`     | No GPU (alias: `--gpu 0`)                  | GPU on  |
 | `--nodate`  | Keep legacy `.condor` names without date    | dated   |
-| `--prio`    | Request high-priority scheduling            | off     |
-| `--nice`    | Run as nice user (lower priority)           | off     |
+| `--prio`    | Request high-priority scheduling (alias of `--level 3`) | off |
+| `--nice`    | Run as nice user (alias of `--level 0`)     | off     |
+| `--level N` | Priority level 0..3 (0=nice, 1=normal, 2=Media, 3=Alta) | unset |
 | `--local`   | Pin job to current machine (`$HOSTNAME`)    | off     |
 | `--autoenv` | Auto-wrap `python` in the active env        | off     |
 | `--noblock` | Return immediately, don't wait for the job  | block   |
@@ -78,6 +80,7 @@ The installer can append these aliases to `~/.bashrc`:
 - `condor_for` — submit an array of indexed jobs
 - `condor_list` — submit jobs from a list file
 - `condor_joblist` — show running jobs grouped by host, optionally with `--color 1`
+- `condor_stop` — interactively kill jobs from the right submitter host
 - `condor_reserve` — reserve one or more GPUs on the current machine
 
 All submit wrappers append a timestamp to `.condor` file names by default. Use
@@ -312,7 +315,146 @@ This is a quick way to compare how nice jobs and high-priority jobs appear in th
 queue on `voz`.
 
 
-### 3. Reserve two local GPUs
+### 3. Climb the priority ladder with `--level`
+
+The `--level` argument exposes the four priority tiers of the cluster:
+
+| Level | Meaning                                  | Equivalent flag |
+|-------|------------------------------------------|-----------------|
+| `0`   | Nice job (lowest priority, evictable)    | `--nice`        |
+| `1`   | Normal job (no nice, no prio)            | (default)       |
+| `2`   | `+Prioridad = "Media"`                   | —               |
+| `3`   | `+Prioridad = "Alta"` (highest)          | `--prio`        |
+
+A higher level evicts running jobs of any lower level. The following walk-through
+fills the cluster with two sleeping GPU jobs and then keeps adding new jobs at
+increasing levels, checking the queue between submissions to see the evictions.
+
+```bash
+rm -rf .condor/
+```
+
+#### Step 1. Launch two long-running local GPU jobs at level 0 (nice)
+
+```bash
+condor --local --level 0 --noblock sleep 5m
+condor --local --level 0 --noblock sleep 5m
+```
+
+Check the queue and confirm both nice jobs are running:
+
+```bash
+condor_joblist
+```
+
+#### Step 2. Add two level 1 jobs (normal) — they should evict both level 0 jobs
+
+```bash
+condor --local --level 1 --noblock sleep 5m
+condor --local --level 1 --noblock sleep 5m
+```
+
+```bash
+condor_joblist
+```
+
+Wait a few seconds and check again; the two level 1 jobs should displace the
+two level 0 jobs back to idle.
+
+#### Step 3. Add two level 2 jobs — they should evict both level 1 jobs
+
+```bash
+condor --local --level 2 --noblock sleep 5m
+condor --local --level 2 --noblock sleep 5m
+```
+
+```bash
+condor_joblist
+```
+
+#### Step 4. Add two level 3 jobs (`Alta`, equivalent to `--prio`) — they should evict both level 2 jobs
+
+```bash
+condor --local --level 3 --noblock sleep 5m
+condor --local --level 3 --noblock sleep 5m
+```
+
+```bash
+condor_joblist
+```
+
+At this point the two level 3 jobs are running and the lower-level jobs sit idle
+waiting for free GPU slots.
+
+#### Step 5. Same experiment with `condor_for`
+
+Clean up first and reserve the local GPUs again with two array jobs at level 0:
+
+```bash
+condor_rm $USER
+rm -rf .condor/
+
+condor_for --local --level 0 --noblock sleep 5m 2
+condor_joblist
+```
+
+Now keep climbing the levels with two jobs per level and watch the evictions:
+
+```bash
+condor_for --local --level 1 --noblock sleep 5m 2
+condor_joblist
+
+condor_for --local --level 2 --noblock sleep 5m 2
+condor_joblist
+
+condor_for --local --level 3 --noblock sleep 5m 2
+condor_joblist
+```
+
+#### Step 6. Same experiment with `condor_list`
+
+Clean up and prepare a tiny list file:
+
+```bash
+condor_rm $USER
+rm -rf .condor/
+
+echo '5m
+5m' > sleeplist.txt
+```
+
+Launch two local GPU sleep jobs at level 0:
+
+```bash
+condor_list --local --level 0 --noblock sleep sleeplist.txt
+condor_joblist
+```
+
+Now add two jobs per level using a two-line list and watch the queue between
+submissions:
+
+```bash
+echo '5m
+5m' > two.txt
+
+condor_list --local --level 1 --noblock sleep two.txt
+condor_joblist
+
+condor_list --local --level 2 --noblock sleep two.txt
+condor_joblist
+
+condor_list --local --level 3 --noblock sleep two.txt
+condor_joblist
+```
+
+When you are done, clean the queue:
+
+```bash
+condor_rm $USER
+```
+
+
+### 4. Reserve two local GPUs
 
 ```bash
 rm -rf .condor/
@@ -334,7 +476,7 @@ condor_joblist
 The reservation jobs are pinned to the local host and one queued job is submitted
 per requested GPU.
 
-### 4. Submit an array of jobs with `condor_for`
+### 5. Submit an array of jobs with `condor_for`
 
 ```bash
 rm -rf .condor/
@@ -361,7 +503,7 @@ Check individual outputs:
 cat .condor/python_job.py_5_*.log
 ```
 
-### 5. Submit jobs from a list with `condor_list`
+### 6. Submit jobs from a list with `condor_list`
 
 ```bash
 rm -rf .condor/
@@ -396,7 +538,71 @@ Check individual outputs:
 cat .condor/python_process.py_filelist.txt_*.log
 ```
 
-### 6. Useful standard HTCondor commands
+### 7. Stop jobs from any machine with `condor_stop`
+
+In HTCondor, a job can only be removed (`condor_rm`) from the same schedd
+(machine) that submitted it. Forgetting which host you launched a job from is
+a very common annoyance.
+
+Every submission made through `condor`, `condor_for` or `condor_list` now drops
+a small sidecar file `.condor/<base>._info` that records:
+
+```
+JOBID=12345
+HOSTNAME=vivoidenty01.intra.unizar.es
+IP=155.210.x.x
+USER=youruser
+EXECUTABLE=/usr/bin/python
+ARGUMENTS=gpu_test.py
+NJOBS=1
+SUBMIT_TIME=2026-05-04 12:34:56
+CONFIG=.condor/python_gpu_test.py_..._sub
+```
+
+`condor_stop` reads those files in the current directory and uses them to
+ssh to the right host and run `condor_rm` for you.
+
+#### Interactive picker
+
+From the directory where you submitted the jobs:
+
+```bash
+condor_stop
+```
+
+You get a numbered list with one running job per line, like:
+
+```
+Running jobs found in .condor/:
+
+   1) 155.210.10.21/vivoidenty01.intra.unizar.es  12345  /usr/bin/sleep 5m
+   2) 155.210.10.22/vivoidenty02.intra.unizar.es  12350  /usr/bin/python gpu_test.py
+
+  a) all
+  q) quit
+
+Select job to kill [1-2 / a / q]:
+```
+
+Type `2` and `condor_stop` will run `ssh vivoidenty02.intra.unizar.es condor_rm 12350`
+for you. Type `a` to kill them all.
+
+#### Direct mode
+
+If you already know the cluster id, skip the menu:
+
+```bash
+condor_stop 12345        # find host in .condor/*._info, ssh + condor_rm
+condor_stop all          # kill every still-running job listed in cwd
+```
+
+If the jobid is not found in any local `._info`, `condor_stop` falls back to a
+plain `condor_rm` on the local machine.
+
+> Passwordless ssh to the submitter host must work. Otherwise `condor_stop`
+> will prompt for a password.
+
+### 8. Useful standard HTCondor commands
 
 These commands come from HTCondor itself and are useful when inspecting or
 managing jobs outside the wrapper scripts.
@@ -458,7 +664,7 @@ condor_q jobid -long
 
 Print the full ClassAd for a job with all of its attributes.
 
-### 7. Advanced: configure defaults with `condor.cfg`
+### 9. Advanced: configure defaults with `condor.cfg`
 
 If a `condor.cfg` file is present in the current directory, `condor` copies that
 file into the submit description and then appends the executable, arguments,
