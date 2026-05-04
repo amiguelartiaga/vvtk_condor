@@ -548,7 +548,7 @@ a small sidecar file `.condor/<base>._info` that records:
 
 ```
 JOBID=12345
-HOSTNAME=vivoidenty01.intra.unizar.es
+HOSTNAME=voz11.intra.unizar.es
 IP=155.210.x.x
 USER=youruser
 EXECUTABLE=/usr/bin/python
@@ -574,8 +574,8 @@ You get a numbered list with one running job per line, like:
 ```
 Running jobs found in .condor/:
 
-   1) 155.210.10.21/vivoidenty01.intra.unizar.es  12345  /usr/bin/sleep 5m
-   2) 155.210.10.22/vivoidenty02.intra.unizar.es  12350  /usr/bin/python gpu_test.py
+   1) 155.210.10.21/voz11.intra.unizar.es  12345  /usr/bin/sleep 5m
+   2) 155.210.10.22/voz08.intra.unizar.es  12350  /usr/bin/python gpu_test.py
 
   a) all
   q) quit
@@ -583,7 +583,7 @@ Running jobs found in .condor/:
 Select job to kill [1-2 / a / q]:
 ```
 
-Type `2` and `condor_stop` will run `ssh vivoidenty02.intra.unizar.es condor_rm 12350`
+Type `2` and `condor_stop` will run `ssh voz08.intra.unizar.es condor_rm 12350`
 for you. Type `a` to kill them all.
 
 #### Direct mode
@@ -721,7 +721,7 @@ request_cpus          = 1
 request_gpus          = 1
 request_memory        = 100
 should_transfer_files = no
-requirements = ( TARGET.Machine == "vivoidenty02.intra.unizar.es" )
+requirements = ( TARGET.Machine == "voz08.intra.unizar.es" )
 EOF
 
 condor python gpu_test_info.py
