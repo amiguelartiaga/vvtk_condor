@@ -276,7 +276,69 @@ Check the job list again, in a few seconds job4 should evict one of the nice job
 condor_joblist
 ```
 
-### 2. Compare nice jobs with a high-priority job
+### 2. Submit an array of jobs with `condor_for`
+
+```bash
+rm -rf .condor/
+```
+
+Create a script that receives a job index as its last argument:
+
+```bash
+echo 'import sys
+i = int(sys.argv[1])
+print(f"entering job {i+1}")' > job.py
+```
+
+Submit 5 indexed jobs (each receives 0..4 as its last argument):
+
+```bash
+condor_for --cpu python job.py 5
+```
+
+Each job will print `entering job 1/5`, `entering job 2/5`, etc.
+Check individual outputs:
+
+```bash
+cat .condor/python_job.py_5_*.log
+```
+
+### 3. Submit jobs from a list with `condor_list`
+
+```bash
+rm -rf .condor/
+```
+
+Create a list of files to process:
+
+```bash
+echo 'file1
+file2
+file3' > filelist.txt
+```
+
+Create a script that processes each file passed as its last argument:
+
+```bash
+echo 'import sys
+f = sys.argv[1]
+print(f"processing {f}")' > process.py
+```
+
+Submit one job per line in the list:
+
+```bash
+condor_list --cpu python process.py filelist.txt
+```
+
+Each job will print `processing file1`, `processing file2`, etc.
+Check individual outputs:
+
+```bash
+cat .condor/python_process.py_filelist.txt_*.log
+```
+
+### 4. Compare nice jobs with a high-priority job
 
 ```bash
 rm -rf .condor/
@@ -315,7 +377,7 @@ This is a quick way to compare how nice jobs and high-priority jobs appear in th
 queue on `voz`.
 
 
-### 3. Climb the priority ladder with `--level`
+### 5. Climb the priority ladder with `--level`
 
 The `--level` argument exposes the four priority tiers of the cluster:
 
@@ -453,7 +515,7 @@ condor_rm $USER
 ```
 
 
-### 4. Reserve two local GPUs
+### 6. Reserve two local GPUs
 
 ```bash
 rm -rf .condor/
@@ -474,68 +536,6 @@ condor_joblist
 
 The reservation jobs are pinned to the local host and one queued job is submitted
 per requested GPU.
-
-### 5. Submit an array of jobs with `condor_for`
-
-```bash
-rm -rf .condor/
-```
-
-Create a script that receives a job index as its last argument:
-
-```bash
-echo 'import sys
-i = int(sys.argv[1])
-print(f"entering job {i+1}")' > job.py
-```
-
-Submit 5 indexed jobs (each receives 0..4 as its last argument):
-
-```bash
-condor_for --cpu python job.py 5
-```
-
-Each job will print `entering job 1/5`, `entering job 2/5`, etc.
-Check individual outputs:
-
-```bash
-cat .condor/python_job.py_5_*.log
-```
-
-### 6. Submit jobs from a list with `condor_list`
-
-```bash
-rm -rf .condor/
-```
-
-Create a list of files to process:
-
-```bash
-echo 'file1
-file2
-file3' > filelist.txt
-```
-
-Create a script that processes each file passed as its last argument:
-
-```bash
-echo 'import sys
-f = sys.argv[1]
-print(f"processing {f}")' > process.py
-```
-
-Submit one job per line in the list:
-
-```bash
-condor_list --cpu python process.py filelist.txt
-```
-
-Each job will print `processing file1`, `processing file2`, etc.
-Check individual outputs:
-
-```bash
-cat .condor/python_process.py_filelist.txt_*.log
-```
 
 ### 7. Stop jobs from any machine with `condor_stop`
 
