@@ -432,20 +432,17 @@ condor_list --local --level 0 --noblock sleep sleeplist.txt
 condor_joblist
 ```
 
-Now add two jobs per level using a two-line list and watch the queue between
-submissions:
+Now reuse the same two-line list for the higher levels and watch the queue
+between submissions:
 
 ```bash
-echo '5m
-5m' > two.txt
-
-condor_list --local --level 1 --noblock sleep two.txt
+condor_list --local --level 1 --noblock sleep sleeplist.txt
 condor_joblist
 
-condor_list --local --level 2 --noblock sleep two.txt
+condor_list --local --level 2 --noblock sleep sleeplist.txt
 condor_joblist
 
-condor_list --local --level 3 --noblock sleep two.txt
+condor_list --local --level 3 --noblock sleep sleeplist.txt
 condor_joblist
 ```
 
