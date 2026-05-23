@@ -14,13 +14,14 @@ set -u
 # help
 if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
     cat <<'HELP'
-Usage: condor_stop [JOBID | all]
+Usage: condor_stop [-a] [JOBID | all]
 
 With no argument: scan .condor/*._info files in the current directory,
 list the jobs that still look running, and offer an interactive menu
 to choose which one to kill.
 
   condor_stop              # interactive picker
+  condor_stop -a           # kill every still-running job without asking
   condor_stop all          # kill every still-running job listed in cwd
   condor_stop 12345        # kill cluster 12345 on the host that owns it
                            # (looked up in .condor/*._info, or local fallback)
@@ -102,7 +103,7 @@ remote_rm() {
 
 #-------------------------------------------------------------------
 # Mode 1: condor_stop <jobid>
-if [[ $# -ge 1 && "$1" != "all" ]]; then
+if [[ $# -ge 1 && "$1" != "all" && "$1" != "-a" ]]; then
     target=$1
     found_host=""
     if [[ -d "$INFO_DIR" ]]; then
@@ -174,8 +175,8 @@ if [[ $N -eq 0 ]]; then
 fi
 
 #-------------------------------------------------------------------
-# Mode 2: condor_stop all
-if [[ "${1:-}" == "all" ]]; then
+# Mode 2: condor_stop all / condor_stop -a
+if [[ "${1:-}" == "all" || "${1:-}" == "-a" ]]; then
     echo -e "\e[1;31mKilling all $N running job(s) listed in $INFO_DIR/...\e[0m"
     for ((i=0; i<N; i++)); do
         echo "[$((i+1))/$N] ${RUN_HOST[$i]}  jobs: ${RUN_JOBS[$i]}"

@@ -80,7 +80,7 @@ The installer can append these aliases to `~/.bashrc`:
 - `condor_for` — submit an array of indexed jobs
 - `condor_list` — submit jobs from a list file
 - `condor_joblist` — show running jobs grouped by host, optionally with `--color 1`
-- `condor_stop` — interactively kill jobs from the right submitter host
+- `condor_stop` — interactively kill jobs from the right submitter host (`-a` to kill all without asking)
 - `condor_reserve` — reserve one or more GPUs on the current machine
 
 All submit wrappers append a timestamp to `.condor` file names by default. Use
@@ -593,6 +593,7 @@ If you already know the cluster id, skip the menu:
 ```bash
 condor_stop 12345        # find host in .condor/*._info, ssh + condor_rm
 condor_stop all          # kill every still-running job listed in cwd
+condor_stop -a           # same as `all` — kill everything without asking
 ```
 
 If the jobid is not found in any local `._info`, `condor_stop` falls back to a

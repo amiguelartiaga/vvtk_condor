@@ -16,6 +16,8 @@ Options:
     --nice      Run as nice user (lower priority)
     --autoenv   When EXECUTABLE is python and a venv/conda env is active,
                 wrap the job in an auto-generated activate script
+    --tail      After submitting, wait for the job output to appear and
+                stream it live with tail -f (implies --noblock)
     --help      Show this help message
 
 Examples:
@@ -41,6 +43,7 @@ NOLOCK=false
 APPEND_DATE=true
 NICE_MODE=false
 AUTOENV=false
+TAIL_MODE=false
 
 while [[ "$1" == --* ]]; do
     case "$1" in
@@ -67,11 +70,20 @@ while [[ "$1" == --* ]]; do
             AUTOENV=true
             shift
             ;;
+        --tail)
+            TAIL_MODE=true
+            shift
+            ;;
         *)
             break
             ;;
     esac
 done
+
+# --tail implies noblock (we do our own waiting)
+if [[ "$TAIL_MODE" == true ]]; then
+    BLOCK_MODE="noblock"
+fi
 
 USE_LOCK=true
 if [[ "$BLOCK_MODE" == "noblock" && "$NOLOCK" == true ]]; then
@@ -253,6 +265,26 @@ if [[ "$BLOCK_MODE" == "block" ]]; then
     fi
     if [[ "$USE_LOCK" == true ]]; then
         rm -f "$lock_file"
+    fi
+fi
+
+#-------------------------------------------------------------------
+# --tail: stream log+err live until the job finishes
+if [[ "$TAIL_MODE" == true ]]; then
+    log_file=.condor/${file_condor_base}.log
+    err_file=.condor/${file_condor_base}.err
+    echo "Waiting for job to start..."
+    while [[ ! -f "$log_file" ]]; do
+        sleep 0.5
+    done
+    # give .err a moment to be created alongside .log
+    sleep 0.2
+    if [[ -f "$err_file" ]]; then
+        echo -e "Streaming output (Ctrl+C to stop):\n  stdout: $log_file\n  stderr: $err_file"
+        tail -q -f "$log_file" "$err_file"
+    else
+        echo -e "Streaming output (Ctrl+C to stop):\n  stdout: $log_file"
+        tail -q -f "$log_file"
     fi
 fi
 
