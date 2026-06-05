@@ -369,8 +369,8 @@ if [[ "$TAIL_MODE" == true ]]; then
     # give .err a moment to be created alongside .log
     sleep 0.2
     if [[ -f "$err_file" ]]; then
-        echo -e "Streaming output (Ctrl+C to stop):\n  stdout: $log_file\n  stderr: $err_file"
-        tail -q -f "$log_file" "$err_file"
+        echo -e "Streaming output (Ctrl+C to stop):\n  stdout: $log_file\n  stderr: $err_file (in \e[31mred\e[0m)"
+        ( tail -f "$log_file" & tail -f "$err_file" | sed $'s/.*/\033[31m&\033[0m/' ) 
     else
         echo -e "Streaming output (Ctrl+C to stop):\n  stdout: $log_file"
         tail -q -f "$log_file"
