@@ -1,0 +1,110 @@
+#!/bin/bash
+
+#-------------------------------------------------------------------
+# help / no-args guard
+if [[ $# -eq 0 || "$1" == "--help" || "$1" == "-h" ]]; then
+    cat <<'HELP'
+Usage: condor_reserve_cpu [OPTIONS] DURATION
+
+Reserve CPUs on the local machine by submitting non-blocking HTCondor sleep
+jobs for the requested duration.
+
+Options:
+  --cpu N     Request N CPUs explicitly (default: 1)
+  --nodate    Use legacy log names without appending a timestamp
+  --help      Show this help message
+
+Examples:
+    condor_reserve_cpu 1m
+    condor_reserve_cpu --nodate 1m
+    condor_reserve_cpu --cpu 2 1m
+HELP
+    exit 0
+fi
+
+#-------------------------------------------------------------------
+# parse options: --cpu, --nodate
+NCPUS=1
+APPEND_DATE=true
+
+while [[ "$1" == --* ]]; do
+    case "$1" in
+        --cpu)
+            if [[ -z "$2" || "$2" == --* || ! "$2" =~ ^[0-9]+$ || "$2" -lt 1 ]]; then
+                echo "ERROR: --cpu requires a positive integer value"
+                exit 1
+            fi
+            NCPUS="$2"
+            shift
+            shift
+            ;;
+        --nodate)
+            APPEND_DATE=false
+            shift
+            ;;
+        *)
+            echo "ERROR: Unknown option: $1"
+            exit 1
+            ;;
+    esac
+done
+
+if [[ $# -ne 1 ]]; then
+    echo "ERROR: condor_reserve_cpu requires exactly one duration argument"
+    exit 1
+fi
+
+DURATION="$1"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+SUBMITTER="$SCRIPT_DIR/_condor_submit.sh"
+SLEEP_BIN="$(command -v sleep)"
+
+if [[ ! -x "$SUBMITTER" ]]; then
+    echo "ERROR: Missing submit helper: $SUBMITTER"
+    exit 1
+fi
+
+if [[ -z "$SLEEP_BIN" ]]; then
+    echo "ERROR: Could not find sleep executable"
+    exit 1
+fi
+
+mkdir -p .condor/
+
+job_name="condor_reserve_cpu_${HOSTNAME}_${NCPUS}cpu_${DURATION}"
+if [[ "$APPEND_DATE" == true ]]; then
+    job_name="${job_name}_$(date +%Y%m%d_%H%M%S_%N)"
+fi
+job_name=${job_name// /_}
+job_name=${job_name//-/_}
+job_name=${job_name//\//_}
+condor_task=".condor/${job_name}._sub"
+
+cat > "$condor_task" <<EOF
+universe              = vanilla
+notification          = Never
+getenv                = True
+request_cpus          = 1
+request_gpus          = 0
+request_memory        = 500
+should_transfer_files = no
+requirements          = TARGET.Machine == "${HOSTNAME}"
++Prioridad            = "Alta"
+executable            = ${SLEEP_BIN}
+arguments             = ${DURATION}
+output                = .condor/${job_name}_$(Process).log
+error                 = .condor/${job_name}_$(Process).err
+log                   = .condor/${job_name}._clog
+queue ${NCPUS}
+EOF
+
+"$SUBMITTER" --config "$condor_task"
+
+echo "-----------------------------"
+echo "Submitted local reservation job(s)"
+echo "duration: ${DURATION}"
+echo "cpus: ${NCPUS}"
+echo "log output: .condor/${job_name}_[0-$((NCPUS-1))].log"
+echo "err output: .condor/${job_name}_[0-$((NCPUS-1))].err"
+echo "condor log: .condor/${job_name}._clog"
+echo "-----------------------------"

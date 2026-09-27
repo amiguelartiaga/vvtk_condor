@@ -19,7 +19,7 @@ bash condor_voz
 
 The installer will:
 1. Ask for an install directory (default: `~/.local/bin`)
-2. Extract the core scripts there (`condor`, `condor_for`, `condor_list`, `condor_stop`, `condor_joblist`, `condor_reserve`)
+2. Extract the core scripts there (`condor`, `condor_for`, `condor_list`, `condor_stop`, `condor_joblist`, `condor_reserve`, `condor_reserve_cpu`)
 3. Offer to add the directory to your `PATH` in `~/.bashrc`
 4. Offer to add convenience aliases such as `condor_cpu` and `condor_nice` to `~/.bashrc`
 5. Offer to configure HTCondor system paths (`/usr/local/condor/...`)
@@ -47,6 +47,7 @@ condor --nice my_script.sh                 # Nice GPU job on any machine
 condor --level 2 my_script.sh              # Medium-priority GPU job
 condor --nice --local my_script.sh         # Nice GPU job on this machine
 condor_reserve --gpu 2 1h                  # Reserve 2 local GPUs for 1 hour
+condor_reserve_cpu --cpu 4 1h              # Reserve 4 local CPUs for 1 hour
 condor --help                              # Show all options
 ```
 
@@ -82,6 +83,7 @@ The installer can append these aliases to `~/.bashrc`:
 - `condor_joblist` — show running jobs grouped by host, optionally with `--color 1`
 - `condor_stop` — interactively kill jobs from the right submitter host (`-a` to kill all without asking)
 - `condor_reserve` — reserve one or more GPUs on the current machine
+- `condor_reserve_cpu` — reserve one or more CPUs on the current machine
 
 All submit wrappers append a timestamp to `.condor` file names by default. Use
 `--nodate` when you want the old fixed names instead.
@@ -536,6 +538,13 @@ condor_joblist
 
 The reservation jobs are pinned to the local host and one queued job is submitted
 per requested GPU.
+
+Use `condor_reserve_cpu` the same way to hold CPU cores instead (no GPU is
+requested; one 1-CPU job is queued per requested CPU):
+
+```bash
+condor_reserve_cpu --cpu 4 1h
+```
 
 ### 7. Stop jobs from any machine with `condor_stop`
 

@@ -366,15 +366,45 @@ if [[ "$TAIL_MODE" == true ]]; then
     while [[ ! -f "$log_file" ]]; do
         sleep 0.5
     done
+    
     # give .err a moment to be created alongside .log
     sleep 0.2
+    
+    # Start tailing stdout
+    tail -f "$log_file" &
+    tail_stdout_pid=$!
+    
+    # Start tailing stderr with color if err file exists
     if [[ -f "$err_file" ]]; then
-        echo -e "Streaming output (Ctrl+C to stop):\n  stdout: $log_file\n  stderr: $err_file (in \e[31mred\e[0m)"
-        ( tail -f "$log_file" & tail -f "$err_file" | sed $'s/.*/\033[31m&\033[0m/' ) 
+        echo -e "Streaming output (job will stop automatically when complete):\n  stdout: $log_file\n  stderr: $err_file (in \e[31mred\e[0m)"
+        tail -f "$err_file" | sed $'s/.*/\033[31m&\033[0m/' &
+        tail_stderr_pid=$!
     else
-        echo -e "Streaming output (Ctrl+C to stop):\n  stdout: $log_file"
-        tail -q -f "$log_file"
+        echo -e "Streaming output (job will stop automatically when complete):\n  stdout: $log_file"
+        tail_stderr_pid=""
     fi
+    
+    # Start condor_wait in the background to monitor job completion
+    condor_wait "$clog_file" 2>/dev/null &
+    wait_pid=$!
+    
+    # Wait for condor_wait to detect job completion
+    wait $wait_pid
+    
+    # Kill the tail processes
+    kill $tail_stdout_pid 2>/dev/null
+    [[ -n "$tail_stderr_pid" ]] && kill $tail_stderr_pid 2>/dev/null
+    
+    # Give processes a moment to flush and die
+    sleep 0.3
+    
+    # Clean up lock file
+    if [[ "$USE_LOCK" == true ]]; then
+        rm -f "$lock_file"
+    fi
+    
+    echo -e "\n-----------------------------"
+    echo "Job completed."
 fi
 
 #-------------------------------------------------------------------
