@@ -22,14 +22,15 @@ The wrappers are designed for interactive cluster use:
 - GPU or CPU jobs, depending on the cluster.
 - Nice jobs for lower-priority background work.
 - High-priority or local-only jobs where supported.
+- Jobs pinned to one machine, or to any of several machines, with `--target`.
 - Timestamped `.condor` files by default, with `--nodate` for legacy fixed names.
 
 ## Available clusters
 
 | Cluster | Documentation | Notes |
 |---------|---------------|-------|
-| `voz` | [README_voz.md](README_voz.md) | Default setup. Supports GPU/CPU jobs, `--local`, `--prio`, and `condor_reserve` for local GPU reservations. |
-| `hermes2` | [README_hermes.md](README_hermes.md) | Simpler variant. Supports the core submission commands but not `--local` or `condor_reserve`. |
+| `voz` | [README_voz.md](README_voz.md) | Default setup. Supports GPU/CPU jobs, `--local`, `--target`, `--prio`, and `condor_reserve` for local GPU reservations. |
+| `hermes2` | [README_hermes.md](README_hermes.md) | Simpler variant. Supports the core submission commands and `--target`, but not `--local` or `condor_reserve`. |
 
 ## Main commands
 

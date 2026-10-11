@@ -46,6 +46,8 @@ condor --prio my_script.sh                 # High-priority GPU job
 condor --nice my_script.sh                 # Nice GPU job on any machine
 condor --level 2 my_script.sh              # Medium-priority GPU job
 condor --nice --local my_script.sh         # Nice GPU job on this machine
+condor --target voz08 my_script.sh         # GPU job pinned to voz08
+condor --target voz04,voz08 my_script.sh   # GPU job on voz04 or voz08, whichever is free
 condor_reserve --gpu 2 1h                  # Reserve 2 local GPUs for 1 hour
 condor_reserve_cpu --cpu 4 1h              # Reserve 4 local CPUs for 1 hour
 condor --help                              # Show all options
@@ -61,6 +63,7 @@ condor --help                              # Show all options
 | `--nice`    | Run as nice user (alias of `--level 0`)     | off     |
 | `--level N` | Priority level 0..3 (0=nice, 1=normal, 2=Media, 3=Alta) | unset |
 | `--local`   | Pin job to current machine (`$HOSTNAME`)    | off     |
+| `--target M`| Pin job to machine M (e.g. `voz08`). Comma-separate or repeat to allow several (`voz04,voz08`) | off |
 | `--autoenv` | Auto-wrap `python` in the active env        | off     |
 | `--noblock` | Return immediately, don't wait for the job  | block   |
 
@@ -277,6 +280,56 @@ Check the job list again, in a few seconds job4 should evict one of the nice job
 ```bash
 condor_joblist
 ```
+
+#### Pin a job to one or several machines with `--target`
+
+`--local` always pins the job to the machine you are typing on. With
+`--target` you choose the machine yourself, so you can submit from `voz01` and
+run on `voz08`:
+
+```bash
+condor --noblock --target voz08 python gpu_test_info.py
+```
+
+Short names are completed with the domain of the current host, so `voz08` and
+`voz08.intra.unizar.es` are equivalent.
+
+If you do not care which of a few machines runs the job, list them separated by
+commas (no spaces). Condor then starts the job on whichever one has a free
+slot first:
+
+```bash
+condor --noblock --target voz04,voz08 python gpu_test_info.py
+```
+
+Repeating the flag does the same thing, which is handy when the list is built
+by a script:
+
+```bash
+condor --noblock --target voz04 --target voz08 python gpu_test_info.py
+```
+
+Check where the job landed:
+
+```bash
+condor_joblist
+```
+
+Both forms generate a single `requirements` line in the submit file that ORs
+the machines:
+
+```
+requirements   = ( TARGET.Machine == "voz04.intra.unizar.es" || TARGET.Machine == "voz08.intra.unizar.es" )
+```
+
+`condor_for` and `condor_list` accept `--target` with the same syntax, so an
+array of jobs can be spread over a subset of the cluster:
+
+```bash
+condor_for --noblock --target voz04,voz08 python job.py 5
+```
+
+When both `--target` and `--local` are given, `--target` wins.
 
 ### 2. Submit an array of jobs with `condor_for`
 
@@ -732,6 +785,23 @@ request_gpus          = 1
 request_memory        = 100
 should_transfer_files = no
 requirements = ( TARGET.Machine == "voz08.intra.unizar.es" )
+EOF
+
+condor python gpu_test_info.py
+```
+
+Example 4: GPU job allowed on any of several machines (what `--target voz04,voz08` generates).
+
+```bash
+cat > condor.cfg <<'EOF'
+universe              = vanilla
+notification          = Never
+getenv                = True
+request_cpus          = 1
+request_gpus          = 1
+request_memory        = 100
+should_transfer_files = no
+requirements = ( TARGET.Machine == "voz04.intra.unizar.es" || TARGET.Machine == "voz08.intra.unizar.es" )
 EOF
 
 condor python gpu_test_info.py

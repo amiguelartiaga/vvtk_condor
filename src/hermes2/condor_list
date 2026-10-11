@@ -15,6 +15,9 @@ Options:
     --nodate     Use legacy log names without appending a timestamp
     --cpu        CPU-mode compatibility flag
     --nice       Run as nice user (lower priority)
+    --target M   Pin jobs to machine M (e.g. vivoidenty02). Give several
+                 machines comma-separated (vivoidenty01,vivoidenty02) or repeat
+                 --target; condor picks whichever has a free slot
     --help       Show this help message
 
 Examples:
@@ -23,16 +26,19 @@ Examples:
     condor_list --nodate my_script.sh items.txt           # Reuse legacy non-dated log names
     condor_list --cpu my_script.sh items.txt              # CPU-mode jobs
     condor_list --nice my_script.sh items.txt             # Nice jobs
+    condor_list --target vivoidenty02 my_script.sh items.txt  # Jobs on vivoidenty02
+    condor_list --target vivoidenty01,vivoidenty02 my_script.sh items.txt  # Jobs spread over both
 HELP
     exit 0
 fi
 
 #-------------------------------------------------------------------
-# parse options: --noblock, --nolock, --nodate, --cpu, --nice
+# parse options: --noblock, --nolock, --nodate, --cpu, --nice, --target
 BLOCK_MODE="block"
 NOLOCK=false
 APPEND_DATE=true
 NICE_MODE=false
+TARGET_MACHINES=""
 
 while [[ "$1" == --* ]]; do
     case "$1" in
@@ -49,6 +55,16 @@ while [[ "$1" == --* ]]; do
             shift
             ;;
         --cpu)
+            shift
+            ;;
+        --target)
+            if [[ -z "$2" || "$2" == --* ]]; then
+                echo "ERROR: --target requires one or more machine names (e.g. vivoidenty02 or vivoidenty01,vivoidenty02)"
+                exit 1
+            fi
+            # accumulate: both "--target a,b" and repeated --target work
+            TARGET_MACHINES="${TARGET_MACHINES:+${TARGET_MACHINES},}$2"
+            shift
             shift
             ;;
         --nice)
@@ -134,6 +150,29 @@ should_transfer_files = no
 
 EOF
 #::::::::::::::::::::::::::::::::::::::::::
+fi
+
+#-------------------------------------------------------------------
+# if --target, pin the jobs to one or more machines.
+# --target accepts short names (vivoidenty02) and completes them with this
+# host's domain. Several machines may be given comma-separated or by
+# repeating --target; condor then runs the jobs on whichever one has a free slot.
+if [[ -n "$TARGET_MACHINES" ]]; then
+    TARGET_REQ=""
+    IFS=',' read -r -a _targets <<< "$TARGET_MACHINES"
+    for m in "${_targets[@]}"; do
+        m="${m// /}"
+        [[ -z "$m" ]] && continue
+        if [[ "$m" != *.* && "$HOSTNAME" == *.* ]]; then
+            m="${m}.${HOSTNAME#*.}"
+        fi
+        TARGET_REQ="${TARGET_REQ:+${TARGET_REQ} || }TARGET.Machine == \"${m}\""
+    done
+    if [[ -z "$TARGET_REQ" ]]; then
+        echo "ERROR: --target needs at least one machine name (e.g. vivoidenty02 or vivoidenty01,vivoidenty02)"
+        exit 1
+    fi
+    echo "requirements   = ( ${TARGET_REQ} )" >> ${condor_task}
 fi
 
 #-------------------------------------------------------------------

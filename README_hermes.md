@@ -36,6 +36,8 @@ condor --noblock my_script.sh arg1 arg2    # GPU job, non-blocking
 condor --nodate my_script.sh               # Reuse legacy fixed log names
 condor --cpu my_script.sh                  # CPU-only job (500 MB)
 condor --nice my_script.sh                 # Nice GPU job
+condor --target vivoidenty02 my_script.sh  # GPU job pinned to vivoidenty02
+condor --target vivoidenty01,vivoidenty02 my_script.sh  # GPU job on whichever is free
 condor --help                              # Show all options
 ```
 
@@ -46,6 +48,7 @@ condor --help                              # Show all options
 | `--cpu`     | No GPU                                     | GPU on  |
 | `--nodate`  | Keep legacy `.condor` names without date    | dated   |
 | `--nice`    | Run as nice user (lower priority)           | off     |
+| `--target M`| Pin job to machine M (e.g. `vivoidenty02`). Comma-separate or repeat to allow several | off |
 | `--autoenv` | Auto-wrap `python` in the active env        | off     |
 | `--noblock` | Return immediately, don't wait for the job  | block   |
 
@@ -66,7 +69,7 @@ All submit wrappers append a timestamp to `.condor` file names by default. Use
 ## Tutorial
 
 The workflow is the same as in `voz`, but `hermes2` does not support `--local`
-or any `*_local` helper.
+or any `*_local` helper. Use `--target` to choose the execution machine instead.
 
 ### 1. Submit a single GPU job with `condor`
 
@@ -252,9 +255,43 @@ Check the job list again, in a few seconds job4 should evict one of the nice job
 condor_joblist
 ```
 
+#### Pin a job to one or several machines with `--target`
 
+`--target` lets you choose which machine runs the job:
 
+```bash
+condor --noblock --target vivoidenty02 python gpu_test_info.py
+```
 
+Short names are completed with the domain of the current host, so
+`vivoidenty02` and `vivoidenty02.intra.unizar.es` are equivalent.
+
+To allow a few machines and let condor pick whichever has a free slot, list
+them separated by commas (no spaces), or repeat the flag:
+
+```bash
+condor --noblock --target vivoidenty01,vivoidenty02 python gpu_test_info.py
+condor --noblock --target vivoidenty01 --target vivoidenty02 python gpu_test_info.py
+```
+
+Check where the job landed:
+
+```bash
+condor_joblist
+```
+
+Both forms generate a single `requirements` line in the submit file that ORs
+the machines:
+
+```
+requirements   = ( TARGET.Machine == "vivoidenty01.intra.unizar.es" || TARGET.Machine == "vivoidenty02.intra.unizar.es" )
+```
+
+`condor_for` and `condor_list` accept `--target` with the same syntax:
+
+```bash
+condor_for --noblock --target vivoidenty01,vivoidenty02 python job.py 5
+```
 
 ### 2. Submit an array of jobs with `condor_for`
 
@@ -441,6 +478,23 @@ request_memory        = 100
 +Architecture         = "GPU3090"
 should_transfer_files = no
 requirements = ( TARGET.Machine == "vivoidenty02.intra.unizar.es" )
+EOF
+
+condor python gpu_test_info.py
+```
+
+Example 4: GPU job allowed on any of several machines (what `--target vivoidenty01,vivoidenty02` generates).
+
+```bash
+cat > condor.cfg <<'EOF'
+universe              = vanilla
+notification          = Never
+getenv                = True
+request_cpus          = 1
+request_memory        = 100
++Architecture         = "GPU3090"
+should_transfer_files = no
+requirements = ( TARGET.Machine == "vivoidenty01.intra.unizar.es" || TARGET.Machine == "vivoidenty02.intra.unizar.es" )
 EOF
 
 condor python gpu_test_info.py
