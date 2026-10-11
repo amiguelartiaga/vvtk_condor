@@ -38,6 +38,9 @@ condor --cpu my_script.sh                  # CPU-only job (500 MB)
 condor --nice my_script.sh                 # Nice GPU job
 condor --target vivoidenty02 my_script.sh  # GPU job pinned to vivoidenty02
 condor --target vivoidenty01,vivoidenty02 my_script.sh  # GPU job on whichever is free
+condor --nice --target a100-01,a100-02 my_script.sh      # A100 (+Architecture="A100" chosen from the name)
+condor --nice --target 2nv3090-02 --gpus 2 my_script.sh  # both GPUs of 2nv3090-02 (+Architecture="2GPU3090")
+condor --arch 4A100 --target a100-02 --gpus 4 my_script.sh  # force a value
 condor --help                              # Show all options
 ```
 
@@ -49,6 +52,8 @@ condor --help                              # Show all options
 | `--nodate`  | Keep legacy `.condor` names without date    | dated   |
 | `--nice`    | Run as nice user (lower priority)           | off     |
 | `--target M`| Pin job to machine M (e.g. `vivoidenty02`). Comma-separate or repeat to allow several | off |
+| `--arch A`  | Force `+Architecture="A"` (e.g. `A100`, `4A100`, `2GPU3090`, `GPU3090`) | from `--target` |
+| `--gpus N`  | `request_gpus = N` (e.g. 2 on `2nv3090-02`, up to 4 on `a100-02`) | not set |
 | `--autoenv` | Auto-wrap `python` in the active env        | off     |
 | `--noblock` | Return immediately, don't wait for the job  | block   |
 
@@ -65,6 +70,23 @@ All submit wrappers append a timestamp to `.condor` file names by default. Use
 `--nodate` when you want the old fixed names instead.
 
 `condor_joblist --color 1` highlights your jobs in red. The default is `--color 0`.
+
+### Choosing the node type (`+Architecture`)
+
+hermes nodes only start jobs whose `+Architecture` they list (`condor_status -l <node> | grep ^Start`, checked 2026-10-12):
+
+| Nodes | Accepts | The wrapper sets |
+|---|---|---|
+| `a100-01` (1 A100) | `GPUA100`, `A100` | `A100` |
+| `a100-02` (4 A100) | `A100`, `4A100` (with `request_gpus` ≤ 4) | `A100` |
+| `2nv3090-02` (2 RTX 3090) | `2GPU3090` | `2GPU3090` |
+| `nv3090-*` (1 RTX 3090) | `GPU3090` | `GPU3090` |
+| `her*` CPU nodes | none / `EPYC7662` / `AMD` / `INTEL` … | none (`--cpu`) |
+
+The value comes from the `--target` names; `--arch` overrides it. Without `--target`, GPU jobs get `GPU3090` and `--cpu` jobs none.
+Targets that need different values in one submission are refused (submit them separately). A `condor.cfg` in the
+directory is still used as is; the wrapper adds `+Architecture` / `request_gpus` only when the file lacks them, and
+warns when its `+Architecture` contradicts the target.
 
 ## Tutorial
 

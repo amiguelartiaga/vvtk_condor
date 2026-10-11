@@ -17,7 +17,11 @@ Options:
     --nice       Run as nice user (lower priority)
     --target M   Pin jobs to machine M (e.g. vivoidenty02). Give several
                  machines comma-separated (vivoidenty01,vivoidenty02) or repeat
-                 --target; condor picks whichever has a free slot
+                 --target; condor picks whichever has a free slot. The
+                 +Architecture is chosen from the name (a100* -> A100,
+                 2nv3090* -> 2GPU3090, nv3090* -> GPU3090, others -> none)
+    --arch A     Force +Architecture=A (e.g. A100, 4A100, 2GPU3090, GPU3090)
+    --gpus N     Request N GPUs per job (request_gpus = N)
     --help       Show this help message
 
 Examples:
@@ -39,6 +43,9 @@ NOLOCK=false
 APPEND_DATE=true
 NICE_MODE=false
 TARGET_MACHINES=""
+CPU_MODE=false
+ARCH_OVERRIDE=""
+REQUEST_GPUS=""
 
 while [[ "$1" == --* ]]; do
     case "$1" in
@@ -55,6 +62,25 @@ while [[ "$1" == --* ]]; do
             shift
             ;;
         --cpu)
+            CPU_MODE=true
+            shift
+            ;;
+        --arch)
+            if [[ -z "$2" || "$2" == --* ]]; then
+                echo "ERROR: --arch requires a value (e.g. A100, 4A100, 2GPU3090, GPU3090)"
+                exit 1
+            fi
+            ARCH_OVERRIDE="$2"
+            shift
+            shift
+            ;;
+        --gpus)
+            if [[ ! "$2" =~ ^[0-9]+$ ]]; then
+                echo "ERROR: --gpus requires a number (e.g. --gpus 2)"
+                exit 1
+            fi
+            REQUEST_GPUS="$2"
+            shift
             shift
             ;;
         --target)
@@ -119,6 +145,54 @@ if [[ "$USE_LOCK" == true && -f "$lock_file" ]]; then
 fi
 
 #-------------------------------------------------------------------
+# choose +Architecture: hermes nodes only START jobs whose ARCHITECTURE they
+# list (checked on hermes2 with condor_status -l, 2026-10-12):
+#   a100-01  (1 A100):  "GPUA100" or "A100"
+#   a100-02  (4 A100):  "A100" or "4A100"          -> we use "A100" for both
+#   2nv3090-02 (2 GPUs): "2GPU3090"
+#   nv3090-*  (1 GPU):  "GPU3090"                  (the old fixed default)
+#   her*, other CPU nodes: no +Architecture (UNDEFINED)
+# Derived from --target names, overridden by --arch; without --target:
+# GPU3090 for GPU jobs, none for --cpu jobs.
+ARCH=""
+if [[ -n "$ARCH_OVERRIDE" ]]; then
+    ARCH="$ARCH_OVERRIDE"
+elif [[ -n "$TARGET_MACHINES" ]]; then
+    IFS=',' read -r -a _arch_targets <<< "$TARGET_MACHINES"
+    for m in "${_arch_targets[@]}"; do
+        m="${m// /}"
+        [[ -z "$m" ]] && continue
+        case "${m%%.*}" in
+            a100*)    a="A100" ;;
+            2nv3090*) a="2GPU3090" ;;
+            nv3090*)  a="GPU3090" ;;
+            *)        a="UNDEFINED" ;;
+        esac
+        if [[ -z "$ARCH" ]]; then
+            ARCH="$a"
+        elif [[ "$ARCH" != "$a" ]]; then
+            echo "ERROR: the --target machines need different +Architecture values ($ARCH vs $a for $m)."
+            echo "       Submit them separately, or force one value with --arch NAME."
+            exit 1
+        fi
+    done
+elif [[ "$CPU_MODE" == true ]]; then
+    ARCH="UNDEFINED"
+else
+    ARCH="GPU3090"
+fi
+if [[ "$ARCH" == "UNDEFINED" || -z "$ARCH" ]]; then
+    ARCH_LINE="#+Architecture: none (CPU / generic nodes)"
+else
+    ARCH_LINE="+Architecture=\"${ARCH}\""
+fi
+GPUS_LINE="#request_gpus: not set"
+if [[ -n "$REQUEST_GPUS" ]]; then
+    GPUS_LINE="request_gpus          = ${REQUEST_GPUS}"
+fi
+echo "Architecture: ${ARCH}${REQUEST_GPUS:+, request_gpus=${REQUEST_GPUS}}"
+
+#-------------------------------------------------------------------
 # create condor config
 condor_task=.condor/${file_condor_base}._sub
 
@@ -127,6 +201,17 @@ if [ -f condor.cfg ];
 then
     echo "condor.cfg exists."
     cp condor.cfg ${condor_task} 
+    CFG_ARCH=$(grep -i '^[[:space:]]*+Architecture' condor.cfg | head -1 | sed -E 's/.*=[[:space:]]*"?([^"]*)"?.*/\1/')
+    if [[ -n "$CFG_ARCH" && ( -n "$TARGET_MACHINES" || -n "$ARCH_OVERRIDE" ) && "$ARCH" != "UNDEFINED" && "$CFG_ARCH" != "$ARCH" ]]; then
+        echo -e "\e[1;33mWARNING: condor.cfg sets +Architecture=\"$CFG_ARCH\" but the target needs \"$ARCH\": the job may never start.\e[0m"
+    fi
+    if ! grep -qi '^[[:space:]]*+Architecture' condor.cfg && [[ "$ARCH_LINE" != \#* ]]; then
+        echo "${ARCH_LINE}" >> ${condor_task}
+        echo "  (condor.cfg has no +Architecture: added ${ARCH_LINE})"
+    fi
+    if [[ -n "$REQUEST_GPUS" ]] && ! grep -qi '^[[:space:]]*request_gpus' condor.cfg; then
+        echo "${GPUS_LINE}" >> ${condor_task}
+    fi
 else
    echo "condor.cfg does not exist, creating default"
 
@@ -144,7 +229,8 @@ universe              = vanilla
 notification          = Never 
 ${NICE_LINE}
 getenv                = True
-+Architecture="GPU3090"
+${ARCH_LINE}
+${GPUS_LINE}
 should_transfer_files = no
 
 EOF
