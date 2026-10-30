@@ -41,6 +41,7 @@ condor --target vivoidenty01,vivoidenty02 my_script.sh  # GPU job on whichever i
 condor --nice --target a100-01,a100-02 my_script.sh      # A100 (+Architecture="A100" chosen from the name)
 condor --nice --target 2nv3090-02 --gpus 2 my_script.sh  # both GPUs of 2nv3090-02 (+Architecture="2GPU3090")
 condor --arch 4A100 --target a100-02 --gpus 4 my_script.sh  # force a value
+condor --nice --cpu --cpus 16 --memory 20000 --target her09-03,her09-27 my_script.sh  # 16-core CPU job
 condor --help                              # Show all options
 ```
 
@@ -54,6 +55,8 @@ condor --help                              # Show all options
 | `--target M`| Pin job to machine M (e.g. `vivoidenty02`). Comma-separate or repeat to allow several | off |
 | `--arch A`  | Force `+Architecture="A"` (e.g. `A100`, `4A100`, `2GPU3090`, `GPU3090`) | from `--target` |
 | `--gpus N`  | `request_gpus = N` (e.g. 2 on `2nv3090-02`, up to 4 on `a100-02`) | not set |
+| `--cpus N`  | `request_cpus = N` (the big CPU nodes only take big jobs, see below) | not set (1) |
+| `--memory MB` | `request_memory = MB` | not set |
 | `--autoenv` | Auto-wrap `python` in the active env        | off     |
 | `--noblock` | Return immediately, don't wait for the job  | block   |
 
@@ -73,7 +76,7 @@ All submit wrappers append a timestamp to `.condor` file names by default. Use
 
 ### Choosing the node type (`+Architecture`)
 
-hermes nodes only start jobs whose `+Architecture` they list (`condor_status -l <node> | grep ^Start`, checked 2026-10-12):
+hermes nodes only start jobs whose `+Architecture` they list (`condor_status -l <node> | grep ^Start`, checked 2026-10-12, CPU nodes 2026-10-30):
 
 | Nodes | Accepts | The wrapper sets |
 |---|---|---|
@@ -81,12 +84,17 @@ hermes nodes only start jobs whose `+Architecture` they list (`condor_status -l 
 | `a100-02` (4 A100) | `A100`, `4A100` (with `request_gpus` ≤ 4) | `A100` |
 | `2nv3090-02` (2 RTX 3090) | `2GPU3090` | `2GPU3090` |
 | `nv3090-*` (1 RTX 3090) | `GPU3090` | `GPU3090` |
-| `her*` CPU nodes | none / `EPYC7662` / `AMD` / `INTEL` … | none (`--cpu`) |
+| `her*` CPU nodes | the string `"UNDEFINED"` (a job without the attribute never starts), or `EPYC7662` / `AMD` / `INTEL` … | `UNDEFINED` (`--cpu`, `her*` targets) |
 
-The value comes from the `--target` names; `--arch` overrides it. Without `--target`, GPU jobs get `GPU3090` and `--cpu` jobs none.
+The value comes from the `--target` names; `--arch` overrides it. Without `--target`, GPU jobs get `GPU3090` and `--cpu` jobs `UNDEFINED`.
 Targets that need different values in one submission are refused (submit them separately). A `condor.cfg` in the
-directory is still used as is; the wrapper adds `+Architecture` / `request_gpus` only when the file lacks them, and
-warns when its `+Architecture` contradicts the target.
+directory is still used as is; the wrapper adds `+Architecture` / `request_gpus` / `request_cpus` / `request_memory` / `nice_user` (`--nice`) only when the
+file lacks them, and warns when its `+Architecture` contradicts the target.
+
+CPU nodes also filter by job size (START, 2026-10-30): her09-02 / 05 / 07 / 11 / 16 / 17 / 31 take any size; her09-14 at most 32
+CPUs; her09-03 more than 15 CPUs and 15 GB (or > 100 CPUs, or > 10 CPUs and 128 GB); her09-10 more than 32 CPUs and 80 GB;
+her09-27 and her09-34 more than 15 CPUs; her09-33 exactly 16. A 1-CPU job only fits the any-size nodes, which are often full;
+use `--cpus` / `--memory` to reach the big ones. Condor sets `OMP_NUM_THREADS = request_cpus`.
 
 ## Tutorial
 
