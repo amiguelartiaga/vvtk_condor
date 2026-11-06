@@ -24,7 +24,10 @@ for f in "$PACKAGE_DIR"/*; do
 			;;
 	esac
 	cp "$f" "$TMPDIR/$(basename "$f")"
-	chmod +x "$TMPDIR/$(basename "$f")"
+	case "$f" in
+		*.txt) chmod 644 "$TMPDIR/$(basename "$f")" ;;   # data files, not commands
+		*)     chmod +x  "$TMPDIR/$(basename "$f")" ;;
+	esac
 	FOUND_FILES=1
 done
 
@@ -100,11 +103,34 @@ echo ")" >> "$OUT"
 
 # Part 3: rest of the installer
 cat >> "$OUT" << 'PART3'
+# nodes_voz.txt (GPU inventory) is replaced on every install. If the installed
+# one is different (edited by hand, or an older version), keep a dated backup so
+# no change is lost silently.
+NODES_BACKUP=""
+if [[ -f "$INSTALL_DIR/nodes_voz.txt" ]]; then
+	NEW_NODES_TMP=$(mktemp)
+	echo "$PAYLOAD_B64" | base64 -d | tar -xzOf - nodes_voz.txt > "$NEW_NODES_TMP" 2>/dev/null || true
+	if [[ -s "$NEW_NODES_TMP" ]] && ! cmp -s "$NEW_NODES_TMP" "$INSTALL_DIR/nodes_voz.txt"; then
+		NODES_BACKUP="$INSTALL_DIR/nodes_voz.txt.bak_$(date +%Y%m%d_%H%M%S)"
+		cp "$INSTALL_DIR/nodes_voz.txt" "$NODES_BACKUP"
+		chmod 644 "$NODES_BACKUP"
+	fi
+	rm -f "$NEW_NODES_TMP"
+fi
 echo "$PAYLOAD_B64" | base64 -d | tar -xzf - -C "$INSTALL_DIR"
 for installed_file in "${INSTALL_FILES[@]}"; do
-	chmod +x "$INSTALL_DIR/$installed_file"
+	case "$installed_file" in
+		*.txt) chmod 644 "$INSTALL_DIR/$installed_file" ;;
+		*)     chmod +x  "$INSTALL_DIR/$installed_file" ;;
+	esac
 done
 echo -e "  -> ${GREEN}Done${RESET}"
+if [[ -n "$NODES_BACKUP" ]]; then
+	echo -e "  ${YELLOW}nodes_voz.txt (GPU inventory) was updated. Your previous one was different${RESET}"
+	echo -e "  ${YELLOW}and is saved as: $NODES_BACKUP${RESET}"
+	echo "  If you had edited it by hand, keep your version where installs never touch it:"
+	echo "    mkdir -p ~/.config/vvtk_condor && cp $NODES_BACKUP ~/.config/vvtk_condor/nodes_voz.txt"
+fi
 echo ""
 
 # ---------------------------------------------------------------
@@ -142,6 +168,8 @@ VOZ_ALIASES=(
 	"alias condor_local_prio='condor --local --prio'"
 	"alias condor_cpu_local='condor --cpu --local'"
 	"alias condor_nice_local='condor --nice --local'"
+	"alias condor_qxf='condor_qx -f'"
+	"alias condor_qgf='condor_qg -f'"
 )
 
 MISSING_VOZ_ALIASES=()

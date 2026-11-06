@@ -26,6 +26,12 @@ Options:
     --target M   Pin jobs to machine M (e.g. voz08 or voz08.intra.unizar.es).
                  Give several machines comma-separated (voz04,voz08) or repeat
                  --target; condor picks whichever has a free slot
+    --gpu-model M
+                 Run the jobs on a node with GPU model M, or part of its name
+                 (4090, 3090, "rtx pro"); several: 3090,4090. See condor_nodes
+    --vram G     Run the jobs on a node whose GPUs have >= G GB of memory
+                 (mixed nodes are skipped; combine with --gpu-model if needed)
+    --dry-run    Write and print the submit file, but do not submit it
     --help       Show this help message
 
 Examples:
@@ -36,6 +42,9 @@ Examples:
     condor_list --nice --local my_script.sh items.txt     # Nice GPU jobs, local
     condor_list --target voz08 my_script.sh items.txt     # GPU jobs on voz08
     condor_list --target voz04,voz08 my_script.sh items.txt # GPU jobs spread over voz04/voz08
+    condor_list --gpu-model 4090 my_script.sh items.txt   # GPU jobs on RTX 4090 nodes
+    condor_list --vram 20 my_script.sh items.txt          # GPU jobs on GPUs with >= 20 GB
+    condor_list --dry-run --vram 20 my_script.sh items.txt # Only show the submit file
     condor_list --memory 4000 my_script.sh items.txt      # Jobs with 4 GB
     condor_list --prio my_script.sh items.txt             # High-priority jobs (level 3)
     condor_list --level 0 my_script.sh items.txt          # Nice jobs   (lowest priority)
@@ -47,7 +56,7 @@ HELP
 fi
 
 #-------------------------------------------------------------------
-# parse options: --noblock, --nolock, --nodate, --cpu, --memory, --prio, --nice, --local, --target
+# parse options: --noblock, --nolock, --nodate, --cpu, --memory, --prio, --nice, --local, --target, --gpu-model, --vram, --dry-run
 BLOCK_MODE="block"
 GPU_MODE=1
 NOLOCK=false
@@ -55,6 +64,9 @@ APPEND_DATE=true
 NICE_MODE=false
 LOCAL_MODE=false
 TARGET_MACHINES=""
+GPU_MODEL=""
+MIN_VRAM=""
+DRY_RUN=false
 PRIO_MODE=false
 LEVEL=""
 REQUEST_MEMORY=500
@@ -108,6 +120,28 @@ while [[ "$1" == --* ]]; do
             LOCAL_MODE=true
             shift
             ;;
+        --gpu-model)
+            if [[ -z "$2" || "$2" == --* ]]; then
+                echo "ERROR: --gpu-model requires a GPU model (e.g. 4090 or 3090,4090; see condor_nodes)"
+                exit 1
+            fi
+            GPU_MODEL="${GPU_MODEL:+${GPU_MODEL},}$2"
+            shift
+            shift
+            ;;
+        --vram)
+            if [[ -z "$2" || ! "$2" =~ ^[0-9]+([.][0-9]+)?$ ]]; then
+                echo "ERROR: --vram requires a number of GB (e.g. 20)"
+                exit 1
+            fi
+            MIN_VRAM="$2"
+            shift
+            shift
+            ;;
+        --dry-run)
+            DRY_RUN=true
+            shift
+            ;;
         --target)
             if [[ -z "$2" || "$2" == --* ]]; then
                 echo "ERROR: --target requires one or more machine names (e.g. voz08 or voz04,voz08)"
@@ -143,6 +177,33 @@ if [[ -n "$LEVEL" ]]; then
         2) PRIO_TAG="Media" ;;
         3) PRIO_TAG="Alta" ;;
     esac
+fi
+
+#-------------------------------------------------------------------
+# --gpu-model / --vram: turn the GPU request into a list of machines using the
+# GPU inventory (condor_nodes reads nodes_voz.txt, because Condor's own GPU
+# data is broken on this pool). The list then goes through the same code as
+# --target, plus a rank that prefers the smallest GPU that fits.
+GPU_SELECT=false
+if [[ -n "$GPU_MODEL" || -n "$MIN_VRAM" ]]; then
+    if [[ "$GPU_MODE" -eq 0 ]]; then
+        echo "ERROR: --gpu-model / --vram cannot be combined with --cpu"
+        exit 1
+    fi
+    if [[ -n "$TARGET_MACHINES" || "$LOCAL_MODE" == true ]]; then
+        echo "ERROR: use either --target / --local or --gpu-model / --vram, not both"
+        exit 1
+    fi
+    if ! command -v condor_nodes >/dev/null 2>&1; then
+        echo "ERROR: condor_nodes not found in PATH: install it next to condor (it comes with the installer)"
+        exit 1
+    fi
+    sel_args=(--select --gpu "$GPU_MODE")
+    [[ -n "$GPU_MODEL" ]] && sel_args+=(--gpu-model "$GPU_MODEL")
+    [[ -n "$MIN_VRAM" ]] && sel_args+=(--vram "$MIN_VRAM")
+    TARGET_MACHINES=$(condor_nodes "${sel_args[@]}") || exit 1
+    GPU_SELECT=true
+    echo "GPU request -> nodes (best fit first): ${TARGET_MACHINES//,/, }"
 fi
 
 file=$1
@@ -244,6 +305,19 @@ fi
 if [[ -n "$TARGET_REQ" ]]; then
     echo "requirements   = ( ${TARGET_REQ} )" >> ${condor_task}
 fi
+if [[ "$GPU_SELECT" == true ]]; then
+    # prefer the machines at the start of the list (smallest GPU that fits)
+    RANK_EXPR=""
+    w=${#_targets[@]}
+    for m in "${_targets[@]}"; do
+        if [[ "$m" != *.* && "$HOSTNAME" == *.* ]]; then
+            m="${m}.${HOSTNAME#*.}"
+        fi
+        RANK_EXPR="${RANK_EXPR:+${RANK_EXPR} + }(TARGET.Machine == \"${m}\") * ${w}"
+        w=$((w - 1))
+    done
+    echo "rank           = ${RANK_EXPR}" >> ${condor_task}
+fi
 
 if [[ -n "$PRIO_TAG" ]]; then
     echo "+Prioridad = \"${PRIO_TAG}\"" >> ${condor_task}
@@ -275,6 +349,25 @@ done >> ${condor_task}
 # view the condor config
 
 #cat ${condor_task}
+
+#-------------------------------------------------------------------
+# --dry-run: show the submit file and stop before submitting anything
+if [[ "$DRY_RUN" == true ]]; then
+    n_lines=$(wc -l < "${condor_task}")
+    echo "-----------------------------"
+    echo "Dry run: nothing was submitted."
+    echo "Submit file: ${condor_task}"
+    echo "-----------------------------"
+    if (( n_lines > 60 )); then
+        head -n 40 "${condor_task}"
+        echo "... (${n_lines} lines in total, see ${condor_task})"
+    else
+        cat "${condor_task}"
+    fi
+    echo "-----------------------------"
+    echo "To submit it, run the same command without --dry-run."
+    exit 0
+fi
 
 #-------------------------------------------------------------------
 # clean old condor log so condor_wait doesn't see stale events

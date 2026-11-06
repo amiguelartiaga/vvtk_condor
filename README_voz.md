@@ -19,9 +19,9 @@ bash condor_voz
 
 The installer will:
 1. Ask for an install directory (default: `~/.local/bin`)
-2. Extract the core scripts there (`condor`, `condor_for`, `condor_list`, `condor_stop`, `condor_joblist`, `condor_reserve`, `condor_reserve_cpu`)
+2. Extract the core scripts there (`condor`, `condor_for`, `condor_list`, `condor_stop`, `condor_joblist`, `condor_qx`, `condor_qg`, `condor_nodes`, `condor_reserve`, `condor_reserve_cpu`) and the GPU inventory `nodes_voz.txt`
 3. Offer to add the directory to your `PATH` in `~/.bashrc`
-4. Offer to add convenience aliases such as `condor_cpu` and `condor_nice` to `~/.bashrc`
+4. Offer to add convenience aliases such as `condor_cpu`, `condor_nice` and `condor_qxf` to `~/.bashrc`
 5. Offer to configure HTCondor system paths (`/usr/local/condor/...`)
 
 Pressing Enter on every prompt accepts the defaults and gives you a working setup.
@@ -48,8 +48,14 @@ condor --level 2 my_script.sh              # Medium-priority GPU job
 condor --nice --local my_script.sh         # Nice GPU job on this machine
 condor --target voz08 my_script.sh         # GPU job pinned to voz08
 condor --target voz04,voz08 my_script.sh   # GPU job on voz04 or voz08, whichever is free
+condor --gpu-model 4090 my_script.sh       # GPU job on any node with an RTX 4090
+condor --vram 20 my_script.sh              # GPU job on any GPU with >= 20 GB
+condor --dry-run --vram 20 my_script.sh    # Only write and show the submit file
+condor_nodes                               # Which GPUs each node has and what is free
 condor_reserve --gpu 2 1h                  # Reserve 2 local GPUs for 1 hour
 condor_reserve_cpu --cpu 4 1h              # Reserve 4 local CPUs for 1 hour
+condor_qx                                  # Your jobs and what is free on each node
+condor_qg -f                               # Everyone's jobs, full view with diagnosis
 condor --help                              # Show all options
 ```
 
@@ -64,6 +70,9 @@ condor --help                              # Show all options
 | `--level N` | Priority level 0..3 (0=nice, 1=normal, 2=Media, 3=Alta) | unset |
 | `--local`   | Pin job to current machine (`$HOSTNAME`)    | off     |
 | `--target M`| Pin job to machine M (e.g. `voz08`). Comma-separate or repeat to allow several (`voz04,voz08`) | off |
+| `--gpu-model M` | Run on a node with GPU model M, or part of its name (`4090`, `3090,4090`) | any |
+| `--vram G`  | Run on a node whose GPUs have at least G GB of memory | any |
+| `--dry-run` | Write and print the submit file, but do not submit it | off |
 | `--autoenv` | Auto-wrap `python` in the active env        | off     |
 | `--noblock` | Return immediately, don't wait for the job  | block   |
 
@@ -78,12 +87,17 @@ The installer can append these aliases to `~/.bashrc`:
 | `condor_local`      | `condor --local`               |
 | `condor_cpu_local`  | `condor --cpu --local`         |
 | `condor_nice_local` | `condor --nice --local`        |
+| `condor_qxf`        | `condor_qx -f`                 |
+| `condor_qgf`        | `condor_qg -f`                 |
 
 ### Loop & monitor tools
 
 - `condor_for` — submit an array of indexed jobs
 - `condor_list` — submit jobs from a list file
 - `condor_joblist` — show running jobs grouped by host, optionally with `--color 1`
+- `condor_qx` — your jobs (running, idle, held) with the reason why they wait, plus free resources per node (`-f` for the full view)
+- `condor_nodes` — which GPUs each node has, what is free now, and which nodes fit `--gpu-model` / `--vram`
+- `condor_qg` — the same view for all users of the pool (`-f` for the full view)
 - `condor_stop` — interactively kill jobs from the right submitter host (`-a` to kill all without asking)
 - `condor_reserve` — reserve one or more GPUs on the current machine
 - `condor_reserve_cpu` — reserve one or more CPUs on the current machine
@@ -664,7 +678,199 @@ plain `condor_rm` on the local machine.
 > Passwordless ssh to the submitter host must work. Otherwise `condor_stop`
 > will prompt for a password.
 
-### 8. Useful standard HTCondor commands
+### 8. See what is happening with `condor_qx` and `condor_qg`
+
+`condor_joblist` tells you *where* jobs are running. `condor_qx` and
+`condor_qg` also tell you *what is free* on each node and, for jobs that do not
+run, *why*. They are read-only: they never change or remove jobs.
+
+| Command        | Shows                                 |
+|----------------|---------------------------------------|
+| `condor_qx`    | your jobs + free resources per node   |
+| `condor_qg`    | the jobs of all users + free resources per node |
+| `condor_qx -f` | full view (alias `condor_qxf`)        |
+| `condor_qg -f` | full view (alias `condor_qgf`)        |
+
+#### Short view
+
+```bash
+condor_qx
+```
+
+```
+condor · 2026-11-06 08:46   view: user youruser   ▶ 1 running   ⏳ 1 idle   ✖ 1 held
+
+Nodes: what is still FREE (of the total)
+  voz08  RTX 4090                    1/2 GPU   20/24 CPU  504G RAM
+  voz09  RTX 3090                    2/2 GPU   28/28 CPU  92G RAM
+  ...
+
+Jobs:
+  ▶ 1460  ★youruser  normal on voz08 19h 21m  python train.py
+  ⏳2866  ★youruser  nice   idle   3d 07h  eval.sh
+      ↳ pinned to voz04 · the matching slots are busy with other users (waiting for priority)
+  ✖ 1255  ★youruser  normal HELD     2h 10m  x.sh
+      ↳ the script does not start with «#!/bin/bash» (or is not executable)
+```
+
+- `▶` running, `⏳` idle (waiting in the queue), `✖` held (stopped by an error).
+- For idle jobs, the line below is Condor's own diagnosis
+  (`condor_q -better-analyze`): for example the job is pinned to a busy node, or
+  no node satisfies its requirements.
+- For held jobs, the line below gives a hint for the most common errors.
+
+#### Full view
+
+```bash
+condor_qg -f
+```
+
+It adds usage bars for CPU/RAM per node, who is using each node, the working
+directory of each job and the detailed queue diagnosis. Held jobs show the full
+reason. Fix the cause and then:
+
+```bash
+condor_release ID     # try again
+condor_rm ID          # or remove it (condor_stop ID works from any machine)
+```
+
+#### Useful options
+
+```bash
+condor_qx --ram          # measure the real RAM of your running jobs (ssh to each node)
+condor_qg -u someuser    # only the jobs of someuser
+condor_qg --nodes-only   # only the node table
+condor_qx --jobs-only    # only the jobs
+condor_qx --no-color     # plain text, e.g. to paste it in an email
+condor_qx --ascii        # no Unicode symbols
+```
+
+> `--ram` needs passwordless ssh to the nodes. Nodes it cannot reach are listed
+> so you can run `ssh vozNN` once to accept their host key.
+
+### 9. Choose the GPU with `--gpu-model` and `--vram`
+
+With `--target` you choose machines by name, so you need to know which GPU each
+machine has. `--gpu-model` and `--vram` let you ask for the GPU instead, and the
+wrappers translate the request into the right submit file.
+
+#### Step 1. See which GPUs the pool has
+
+```bash
+condor_nodes
+```
+
+```
+  NODE    GPUs                            VRAM (GB)    CUDA CAP  FREE NOW
+  voz01   2x RTX 2060                     5.6          7.5       2/2 GPU
+  voz04   2x RTX PRO 6000 Blackwell       95.6         12.0      0/2 GPU
+  voz08   2x RTX 4090                     23.5         8.9       1/2 GPU
+  voz10   A10 + RTX 2080 Ti               22.1/10.6    8.6/7.5   2/2 GPU
+  ...
+```
+
+`FREE NOW` comes from Condor; `down` means the node is not in the pool right now.
+
+#### Step 2. Ask for a GPU model
+
+Any part of the GPU name works, ignoring case and spaces (`4090`, `rtx4090`,
+`"rtx pro"`). Check first which nodes match and why the others do not:
+
+```bash
+condor_nodes --gpu-model 4090
+```
+
+```
+Matching nodes (best fit first): voz08, voz11
+Submit with:  condor --gpu-model 4090 my_script.sh
+```
+
+Then submit as usual:
+
+```bash
+condor --noblock --gpu-model 4090 python gpu_test_info.py
+```
+
+Several models are separated by commas: `--gpu-model 3090,4090`.
+
+#### Step 3. Ask for an amount of GPU memory
+
+```bash
+condor_nodes --vram 20
+condor --noblock --vram 20 python gpu_test_info.py
+```
+
+The values are the usable memory that `nvidia-smi` shows, which is a bit less
+than the number on the box: a "24 GB" RTX 3090 or 4090 has about 23.5 GB, so ask
+for `--vram 20`, not `--vram 24`.
+
+The job may run on any matching node, but Condor prefers the **smallest GPU that
+fits**, so a 20 GB job does not take a 96 GB GPU while a 24 GB one is free.
+
+`--gpu-model` and `--vram` can be combined, and they work with `--nice`,
+`--level`, `condor_for` and `condor_list`. With `condor --gpu 2` only nodes with
+at least two matching GPUs are used (`condor_for` and `condor_list` always ask
+for one GPU per job). They cannot be combined with `--cpu`, `--target` or `--local`.
+
+#### Step 4. Look at the submit file before submitting
+
+`--dry-run` writes the submit file, prints it and stops. Nothing is submitted:
+
+```bash
+condor --dry-run --gpu-model 4090 python gpu_test_info.py
+```
+
+```
+requirements   = ( TARGET.Machine == "voz08.intra.unizar.es" || TARGET.Machine == "voz11.intra.unizar.es" )
+rank           = (TARGET.Machine == "voz08.intra.unizar.es") * 2 + (TARGET.Machine == "voz11.intra.unizar.es") * 1
+```
+
+`requirements` lists the machines that are allowed, and `rank` says which ones
+Condor should try first. `--dry-run` works with any other option too, not only
+with `--gpu-model`.
+
+#### Mixed nodes
+
+`voz10` and `voz12` have two different GPUs. Condor cannot choose which of the
+two a job gets, so `--gpu-model` and `--vram` skip them unless **all** their
+GPUs fit, and print a note. To use one of them anyway, pin it with `--target`.
+
+#### Why a list file and not Condor's GPU data?
+
+HTCondor 8.6 advertises broken GPU data on this pool (for example
+`CUDACapability = 1024.64` and impossible memory sizes), so it cannot select
+GPUs by itself. The GPUs are listed in `nodes_voz.txt`, installed next to the
+scripts, with one line per GPU (`node  vram_gb  arch  model`).
+
+#### When a node changes
+
+The inventory describes the pool, so it is the same for everybody: the right
+fix is to update `src/voz/nodes_voz.txt` in this repository and publish a new
+installer, so everyone gets it.
+
+Do not edit the installed copy: every install replaces it. (If the installed
+one was different, the installer keeps it as `nodes_voz.txt.bak_<date>` and
+tells you.) To use your own inventory, for example to try a change before it
+is published, put it where installs never touch it:
+
+```bash
+mkdir -p ~/.config/vvtk_condor
+cp ~/.local/bin/nodes_voz.txt ~/.config/vvtk_condor/nodes_voz.txt
+nano ~/.config/vvtk_condor/nodes_voz.txt
+```
+
+`condor_nodes` uses the first inventory that exists:
+
+1. the file in `$CONDOR_NODES_FILE`, if you set it;
+2. your own copy, `~/.config/vvtk_condor/nodes_voz.txt`;
+3. the official copy installed next to the scripts.
+
+The last line of `condor_nodes` says which one is in use, and
+`--gpu-model` / `--vram` print a note when it is not the official one.
+Remember to delete your copy once the official one has your change, or you
+will miss later updates.
+
+### 10. Useful standard HTCondor commands
 
 These commands come from HTCondor itself and are useful when inspecting or
 managing jobs outside the wrapper scripts.
@@ -726,7 +932,7 @@ condor_q jobid -long
 
 Print the full ClassAd for a job with all of its attributes.
 
-### 9. Advanced: configure defaults with `condor.cfg`
+### 11. Advanced: configure defaults with `condor.cfg`
 
 If a `condor.cfg` file is present in the current directory, `condor` copies that
 file into the submit description and then appends the executable, arguments,
