@@ -1,0 +1,14 @@
+#!/bin/bash
+#
+# condor_qg — GLOBAL view of the pool: what is free on each node and the jobs of ALL users.
+#
+#   condor_qg            short view: one line per node and one line per job
+#   condor_qg -f         full view: usage bars, who uses each node, why each job waits
+#   condor_qg -u USER    only the jobs of USER
+#   condor_qg --help     all options
+#
+# Read-only: it never changes or removes jobs. See also condor_qx (only your jobs).
+D="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
+PY="$(command -v python3 || command -v python)"
+if [[ -t 1 && -z "$FORCE_COLOR" ]]; then export FORCE_COLOR=1; fi
+CONDOR_VIEW_PROG=condor_qg exec "$PY" "$D/condor_view.py" --default-all "$@"

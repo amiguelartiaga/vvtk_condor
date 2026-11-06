@@ -1,0 +1,15 @@
+#!/bin/bash
+#
+# condor_qx — YOUR jobs (running, idle, held) plus the state of the pool nodes.
+#
+#   condor_qx            short view: one line per node and one line per job
+#   condor_qx -f         full view: usage bars, directories, why each job waits
+#   condor_qx --ram      also measure the real RAM of your running jobs (ssh)
+#   condor_qx -u USER    jobs of another user
+#   condor_qx --help     all options
+#
+# Read-only: it never changes or removes jobs. See also condor_qg (all users).
+D="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
+PY="$(command -v python3 || command -v python)"
+if [[ -t 1 && -z "$FORCE_COLOR" ]]; then export FORCE_COLOR=1; fi
+CONDOR_VIEW_PROG=condor_qx exec "$PY" "$D/condor_view.py" "$@"
