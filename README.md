@@ -13,7 +13,7 @@ In practice, the workflow is:
 
 1. Prepare a command or script to run.
 2. Submit it to the cluster with one of the wrappers.
-3. Check the queue with `condor_joblist`.
+3. Check the queue with `condor_qx` (or `condor_joblist`).
 4. Read the generated logs under `.condor/`.
 
 The wrappers are designed for interactive cluster use:
@@ -23,13 +23,14 @@ The wrappers are designed for interactive cluster use:
 - Nice jobs for lower-priority background work.
 - High-priority or local-only jobs where supported.
 - Jobs pinned to one machine, or to any of several machines, with `--target`.
+- Jobs on a GPU model or a minimum of GPU memory with `--gpu-model` / `--vram` (`voz`), and `--dry-run` to see the submit file without submitting.
 - Timestamped `.condor` files by default, with `--nodate` for legacy fixed names.
 
 ## Available clusters
 
 | Cluster | Documentation | Notes |
 |---------|---------------|-------|
-| `voz` | [README_voz.md](README_voz.md) | Default setup. Supports GPU/CPU jobs, `--local`, `--target`, `--prio`, and `condor_reserve` for local GPU reservations. |
+| `voz` | [README_voz.md](README_voz.md) | Default setup. Supports GPU/CPU jobs, `--local`, `--target`, `--gpu-model`/`--vram`, `--prio`, and `condor_reserve` for local GPU reservations. |
 | `hermes2` | [README_hermes.md](README_hermes.md) | Simpler variant. Supports the core submission commands and `--target`, but not `--local` or `condor_reserve`. |
 
 ## Main commands
@@ -40,6 +41,7 @@ These names are shared by the cluster-specific installers:
 - `condor_for` submits an indexed batch of jobs.
 - `condor_list` submits one job per line in an input list.
 - `condor_joblist` shows current jobs grouped by host, with optional `--color 1` highlighting for your jobs.
+- `condor_qx` / `condor_qg` show your jobs / everyone's jobs, what is free on each node and why idle or held jobs do not run (`-f` for the full view; `voz` only for now).
 - `condor_reserve` reserves local GPUs with sleep jobs on `voz`.
 
 ## Pick the cluster README

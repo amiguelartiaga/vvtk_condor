@@ -1,0 +1,265 @@
+#!/bin/bash
+#
+# condor_nodes — which GPUs each node of the pool has, and which nodes fit a request.
+#
+# The GPU data comes from nodes_voz.txt (installed next to this script), because
+# HTCondor 8.6 advertises broken GPU data. What is free right now comes from
+# condor_status. Read-only: it never submits or changes anything.
+
+#-------------------------------------------------------------------
+# help
+if [[ "$1" == "--help" || "$1" == "-h" ]]; then
+    cat <<'HELP'
+Usage: condor_nodes [--gpu-model M] [--vram G] [--gpu N]
+
+Show the GPUs of every node and how many are free right now. With
+--gpu-model and/or --vram, also tell which nodes fit and why the others don't.
+The same options in condor, condor_for and condor_list choose those nodes.
+
+Options:
+    --gpu-model M  GPU model, or part of its name: 4090, 3090, a10, "rtx pro".
+                   Case and spaces are ignored. Several models: 3090,4090
+    --vram G       At least G GB of GPU memory (usable memory, as nvidia-smi
+                   shows it: a "24 GB" card has about 23.5)
+    --gpu N        Number of GPUs per job (default: 1)
+    --help         Show this help message
+
+Examples:
+    condor_nodes                          # all nodes, their GPUs and what is free
+    condor_nodes --gpu-model 4090         # which nodes have an RTX 4090
+    condor_nodes --vram 20                # which nodes have GPUs with >= 20 GB
+    condor_nodes --gpu-model 3090 --gpu 2 # nodes with two RTX 3090
+    condor --gpu-model 4090 my_script.sh  # run my_script.sh on an RTX 4090
+
+Inventory file (the first one that exists is used):
+    1. $CONDOR_NODES_FILE, if you set it
+    2. ~/.config/vvtk_condor/nodes_voz.txt   your own copy: the installer never touches it
+    3. nodes_voz.txt next to this script     the official one: replaced on every install
+HELP
+    exit 0
+fi
+
+#-------------------------------------------------------------------
+# parse options (--select is internal: used by condor, condor_for, condor_list)
+GPU_MODEL=""
+MIN_VRAM=""
+NGPUS=1
+SELECT=false
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --gpu-model)
+            if [[ -z "$2" || "$2" == --* ]]; then
+                echo "ERROR: --gpu-model requires a GPU model (e.g. 4090 or 3090,4090)" >&2
+                exit 1
+            fi
+            GPU_MODEL="${GPU_MODEL:+${GPU_MODEL},}$2"
+            shift 2
+            ;;
+        --vram)
+            if [[ -z "$2" || ! "$2" =~ ^[0-9]+([.][0-9]+)?$ ]]; then
+                echo "ERROR: --vram requires a number of GB (e.g. 20)" >&2
+                exit 1
+            fi
+            MIN_VRAM="$2"
+            shift 2
+            ;;
+        --gpu)
+            if [[ -z "$2" || ! "$2" =~ ^[1-9][0-9]*$ ]]; then
+                echo "ERROR: --gpu requires a positive integer" >&2
+                exit 1
+            fi
+            NGPUS="$2"
+            shift 2
+            ;;
+        --select)
+            SELECT=true
+            shift
+            ;;
+        *)
+            echo "ERROR: Unknown option: $1 (see condor_nodes --help)" >&2
+            exit 1
+            ;;
+    esac
+done
+
+if [[ -n "$GPU_MODEL" && -z "${GPU_MODEL//[ ,_-]/}" ]]; then
+    echo "ERROR: --gpu-model needs a model name (e.g. 4090), not only spaces or commas" >&2
+    exit 1
+fi
+
+D="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
+# inventory: $CONDOR_NODES_FILE > personal copy > official copy installed next to this script
+USER_NODES_FILE="${XDG_CONFIG_HOME:-$HOME/.config}/vvtk_condor/nodes_voz.txt"
+if [[ -n "$CONDOR_NODES_FILE" ]]; then
+    NODES_FILE="$CONDOR_NODES_FILE"
+    NODES_SOURCE="from \$CONDOR_NODES_FILE"
+elif [[ -f "$USER_NODES_FILE" ]]; then
+    NODES_FILE="$USER_NODES_FILE"
+    NODES_SOURCE="your own copy"
+else
+    NODES_FILE="$D/nodes_voz.txt"
+    NODES_SOURCE="official"
+fi
+if [[ ! -f "$NODES_FILE" ]]; then
+    echo "ERROR: GPU inventory not found: $NODES_FILE ($NODES_SOURCE)" >&2
+    exit 1
+fi
+if [[ "$NODES_SOURCE" != "official" && "$SELECT" == true ]]; then
+    echo "NOTE: using the GPU inventory $NODES_FILE ($NODES_SOURCE), not the official one" >&2
+fi
+
+#-------------------------------------------------------------------
+# what is up and free right now: "machine free_gpus" per partitionable slot
+# (timeout: a stuck collector must not block a submission)
+TIMEOUT=""
+command -v timeout >/dev/null 2>&1 && TIMEOUT="timeout 30"
+LIVE=$($TIMEOUT condor_status -constraint 'PartitionableSlot =?= true' -af Machine GPUs 2>/dev/null)
+
+#-------------------------------------------------------------------
+# text goes through ENVIRON, not -v, so awk does not interpret backslashes in it
+CN_MODELS="$GPU_MODEL" CN_LIVE="$LIVE" \
+awk -v minv="$MIN_VRAM" -v ngpus="$NGPUS" -v select_mode="$SELECT" -v nodes_file="$NODES_FILE" -v nodes_source="$NODES_SOURCE" '
+function norm(s) { s = tolower(s); gsub(/[ _-]/, "", s); return s }
+
+function gpu_fits(n, i,    k, ok) {
+    if (minv != "" && V[n, i] + 0 < minv + 0) return 0
+    if (npat == 0) return 1
+    for (k = 1; k <= npat; k++) if (index(norm(G[n, i]), P[k])) return 1
+    return 0
+}
+
+# "2x RTX 4090" or "A10 + RTX 2080 Ti"
+function label(n,    i, s) {
+    if (mixed[n]) {
+        s = G[n, 1]
+        for (i = 2; i <= cnt[n]; i++) s = s " + " G[n, i]
+        return s
+    }
+    return cnt[n] "x " G[n, 1]
+}
+
+function values(n, arr,    i, s) {
+    if (!mixed[n]) return arr[n, 1]
+    s = arr[n, 1]
+    for (i = 2; i <= cnt[n]; i++) s = s "/" arr[n, i]
+    return s
+}
+
+function reason(n,    i, ok, bad) {
+    if (ngpus + 0 > cnt[n]) return "only " cnt[n] " GPU(s), you ask for " ngpus
+    ok = 0; bad = ""
+    for (i = 1; i <= cnt[n]; i++) {
+        if (gpu_fits(n, i)) ok++
+        else if (bad == "") bad = i
+    }
+    if (ok == cnt[n]) return "ok"
+    if (ok > 0) return "mixed node: Condor could give you its " G[n, bad]
+    if (minv != "" && V[n, bad] + 0 < minv + 0) return "VRAM " V[n, bad] " GB < " minv " GB"
+    return "different model"
+}
+
+BEGIN {
+    models = ENVIRON["CN_MODELS"]
+    live = ENVIRON["CN_LIVE"]
+    nlive = 0
+    npat = split(models, raw, ",")
+    j = 0
+    for (k = 1; k <= npat; k++) { p = norm(raw[k]); if (p != "") P[++j] = p }
+    npat = j
+    nl = split(live, lines, "\n")
+    for (k = 1; k <= nl; k++) {
+        split(lines[k], f, " ")
+        if (f[1] == "") continue
+        m = f[1]; sub(/\..*/, "", m)
+        if (!(m in up)) nlive++
+        up[m] = 1; freeg[m] = f[2]
+    }
+}
+
+/^[[:space:]]*#/ || NF == 0 { next }
+NF < 4 || $1 !~ /^[A-Za-z0-9][A-Za-z0-9.-]*$/ || $2 !~ /^[0-9]+([.][0-9]+)?$/ || $3 !~ /^[0-9]+([.][0-9]+)?$/ {
+    # a broken line must never end up inside a submit file
+    print "WARNING: " nodes_file " line " FNR " ignored (expected: node vram_gb arch model): " $0 > "/dev/stderr"
+    next
+}
+{
+    n = $1
+    if (!(n in cnt)) order[++nn] = n
+    cnt[n]++
+    model = $4
+    for (i = 5; i <= NF; i++) model = model " " $i
+    G[n, cnt[n]] = model; V[n, cnt[n]] = $2; S[n, cnt[n]] = $3
+    if (cnt[n] > 1 && model != G[n, 1]) mixed[n] = 1
+    if (cnt[n] == 1 || $2 + 0 < minvram[n]) minvram[n] = $2 + 0
+}
+
+END {
+    filtering = (npat > 0 || minv != "")
+    nfit = 0
+    for (k = 1; k <= nn; k++) {
+        n = order[k]
+        why[n] = filtering ? reason(n) : ""
+        if (why[n] == "ok") fit[++nfit] = n
+    }
+    # best fit first: smallest GPU memory that still satisfies the request
+    for (a = 1; a <= nfit; a++)
+        for (b = a + 1; b <= nfit; b++)
+            if (minvram[fit[b]] < minvram[fit[a]] || (minvram[fit[b]] == minvram[fit[a]] && fit[b] < fit[a])) {
+                t = fit[a]; fit[a] = fit[b]; fit[b] = t
+            }
+
+    want = (npat > 0 ? "GPU model \"" models "\"" : "")
+    if (minv != "") want = want (want != "" ? " and " : "") ">= " minv " GB of VRAM"
+    want = want ", " ngpus " GPU(s) per job"
+
+    if (select_mode == "true") {
+        nmixed = 0
+        for (k = 1; k <= nn; k++)
+            if (why[order[k]] ~ /^mixed/) {
+                nmixed++
+                print "NOTE: skipping " order[k] " (" why[order[k]] ")" > "/dev/stderr"
+            }
+        if (nfit == 0) {
+            print "ERROR: no node has " want "." > "/dev/stderr"
+            print "       Run  condor_nodes" (npat > 0 ? " --gpu-model " models : "") (minv != "" ? " --vram " minv : "") \
+                  (ngpus > 1 ? " --gpu " ngpus : "") "  to see why." > "/dev/stderr"
+            if (nmixed > 0)
+                print "       To use a mixed node anyway, pin it with --target (you may get either of its GPUs)." > "/dev/stderr"
+            exit 1
+        }
+        nup = 0; s = ""
+        for (a = 1; a <= nfit; a++) { s = s (a > 1 ? "," : "") fit[a]; if (fit[a] in up) nup++ }
+        if (nup == 0 && nlive > 0)
+            print "WARNING: none of the matching nodes (" s ") is in the pool right now: the job will wait until one comes back." > "/dev/stderr"
+        print s
+        exit 0
+    }
+
+    if (filtering) printf "Request: %s\n\n", want
+    printf "  %-6s  %-30s  %-11s  %-8s  %-9s", "NODE", "GPUs", "VRAM (GB)", "CUDA CAP", "FREE NOW"
+    if (filtering) printf "  %s", "FITS?"
+    printf "\n"
+    for (k = 1; k <= nn; k++) {
+        n = order[k]
+        state = (n in up) ? freeg[n] "/" cnt[n] " GPU" : (nlive > 0 ? "down" : "?")
+        printf "  %-6s  %-30s  %-11s  %-8s  %-9s", n, label(n), values(n, V), values(n, S), state
+        if (filtering) printf "  %s %s", (why[n] == "ok" ? "YES" : "no "), (why[n] == "ok" ? "" : "(" why[n] ")")
+        printf "\n"
+    }
+    if (nlive == 0) print "\n(condor_status gave no data: FREE NOW unknown)"
+    print "\nInventory: " nodes_file " (" nodes_source ")"
+    if (filtering) {
+        printf "\n"
+        if (nfit == 0) {
+            print "No node fits this request."
+        } else {
+            s = ""
+            for (a = 1; a <= nfit; a++) s = s (a > 1 ? ", " : "") fit[a]
+            print "Matching nodes (best fit first): " s
+            opts = (npat > 0 ? " --gpu-model " models : "") (minv != "" ? " --vram " minv : "") (ngpus > 1 ? " --gpu " ngpus : "")
+            print "Submit with:  condor" opts " my_script.sh"
+        }
+    }
+}
+' "$NODES_FILE"
